@@ -135,6 +135,7 @@
 			Name="numberBox"
 			Grid.Column="0"
 			GotFocus="NumberBoxGotFocus"
+            GotKeyboardFocus="NumberBoxGotKeyboardFocus"
 			LostFocus="NumberBoxLostFocus"
 			PreviewTextInput="NumberBoxPreviewTextInput"
 			PreviewKeyDown="NumberBoxPreviewKeyDown"
@@ -156,7 +157,7 @@
 				FontSize="4"
 				PreviewMouseLeftButtonDown="UpButtonMouseLeftButtonDown"
 				PreviewMouseLeftButtonUp="UpButtonMouseLeftButtonUp"
-                PreviewKeyDown="UpButton_OnKeyDown">
+                PreviewKeyDown="UpButton_OnKeyDown" TabIndex="-1">
                 <Polygon
 					Style="{StaticResource Arrow}"
 					Points="4,0 0,4 8,4" />
@@ -167,7 +168,7 @@
 				FontSize="4"
 				PreviewMouseLeftButtonDown="DownButtonMouseLeftButtonDown"
 				PreviewMouseLeftButtonUp="DownButtonMouseLeftButtonUp"
-                PreviewKeyDown="DownButton_OnKeyDown">
+                PreviewKeyDown="DownButton_OnKeyDown" TabIndex="-1">
                 <Polygon
 					Style="{StaticResource Arrow}"
 					Points="0,0 8,0 4,4" />

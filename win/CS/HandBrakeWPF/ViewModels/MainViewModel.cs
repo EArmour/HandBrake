@@ -478,7 +478,7 @@ namespace HandBrakeWPF.ViewModels
                                                 ? this.selectedTitle.Chapters.Last().ChapterNumber
                                                 : 1;
 
-                    this.SelectedPointToPoint = PointToPointMode.Chapters;
+                    this.SelectedPointToPoint = PointToPointMode.Seconds;
                     this.SelectedAngle = 1;
 
                     if (this.userSettingService.GetUserSetting<bool>(UserSettingConstants.AutoNaming))

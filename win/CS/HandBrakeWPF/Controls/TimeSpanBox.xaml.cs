@@ -496,9 +496,16 @@ namespace HandBrakeWPF.Controls
         /// </param>
         private void NumberBoxPreviewKeyDown(object sender, KeyEventArgs e)
         {
+            var ue = e.OriginalSource as FrameworkElement;
+            
             if (e.Key == Key.Space)
             {
                 e.Handled = true;
+            }
+            else if (e.Key == Key.Enter)
+            {
+                e.Handled = true;
+                ue.MoveFocus(new TraversalRequest(FocusNavigationDirection.Next));
             }
         }
 
@@ -651,6 +658,25 @@ namespace HandBrakeWPF.Controls
             TimeSpan newTimespanNumber;
             if (int.TryParse(this.numberBox.Text, out newNumber))
             {
+                // ADDED START
+                string text = this.numberBox.Text;
+                bool parsed = false;
+
+                if (text.Length < 5)
+                {
+                    parsed = TimeSpan.TryParseExact(text, "mmss", CultureInfo.InvariantCulture, out newTimespanNumber);
+                }
+                else
+                {
+                    parsed = TimeSpan.TryParseExact(text, "hhmmss", CultureInfo.InvariantCulture, out newTimespanNumber);
+                }
+
+                if (parsed)
+                {
+                    newNumber = (int)Math.Round(newTimespanNumber.TotalSeconds, 0);
+                }
+                // ADDED END
+
                 if (this.NumberIsValid(newNumber))
                 {
                     if (this.Modulus != 0)
@@ -716,6 +742,11 @@ namespace HandBrakeWPF.Controls
             {
                 this.DecrementNumber();
             }
+        }
+
+        private void NumberBoxGotKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
+        {
+            this.Dispatcher.BeginInvoke(new Action(() => this.numberBox.SelectAll()));
         }
     }
 }

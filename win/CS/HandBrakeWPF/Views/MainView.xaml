@@ -426,7 +426,7 @@
                                                ToolTip="{x:Static Properties:ResourcesTooltips.MainView_StartPoint}"
                                                MinWidth="72" Margin="5,0,0,0"  Visibility="{Binding ShowTextEntryForPointToPointMode,
                                                        Converter={StaticResource boolToVisConverter},
-                                                       ConverterParameter=false}" />
+                                                       ConverterParameter=false}" SelectAllOnClick="True" />
 
                         <Label Margin="4,0,0,0" Content="{x:Static Properties:Resources.MainView_through}" />
                         <ComboBox Name="EndPoint"
@@ -443,7 +443,7 @@
                                                ToolTip="{x:Static Properties:ResourcesTooltips.MainView_EndPoint}"
                                                MinWidth="72" Margin="5,0,0,0"  Visibility="{Binding ShowTextEntryForPointToPointMode,
                                                        Converter={StaticResource boolToVisConverter},
-                                                       ConverterParameter=false}" />
+                                                       ConverterParameter=false}"  SelectAllOnClick="True" />
 
                         <Label Margin="2,0,0,0" Content="{x:Static Properties:Resources.MainView_Duration}" FontWeight="Bold" ToolTip="{x:Static Properties:ResourcesTooltips.MainView_Duration}" />
                         <Label Margin="0,0,0,0" Content="{Binding Duration}" ToolTip="{x:Static Properties:ResourcesTooltips.MainView_Duration}" />
