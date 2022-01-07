@@ -1,7 +1,7 @@
 /* nlmeans.c
 
    Copyright (c) 2013 Dirk Farin
-   Copyright (c) 2003-2021 HandBrake Team
+   Copyright (c) 2003-2022 HandBrake Team
    This file is part of the HandBrake source code
    Homepage: <http://handbrake.fr/>.
    It may be used under the terms of the GNU General Public License v2.
@@ -1104,11 +1104,11 @@ static void nlmeans_filter_thread(void *thread_args_v)
         hb_buffer_t *buf;
         buf = hb_frame_buffer_init(pv->output.pix_fmt,
                                    frame->width, frame->height);
-        buf->f.color_prim     = pv->output.color_prim;
-        buf->f.color_transfer = pv->output.color_transfer;
-        buf->f.color_matrix   = pv->output.color_matrix;
-        buf->f.color_range    = pv->output.color_range ;
-
+        buf->f.color_prim      = pv->output.color_prim;
+        buf->f.color_transfer  = pv->output.color_transfer;
+        buf->f.color_matrix    = pv->output.color_matrix;
+        buf->f.color_range     = pv->output.color_range;
+        buf->f.chroma_location = pv->output.chroma_location;
 
         NLMeansFunctions *functions = &pv->functions;
 
@@ -1241,10 +1241,11 @@ static hb_buffer_t * nlmeans_filter_flush(hb_filter_private_t *pv)
         hb_buffer_t *buf;
         buf = hb_frame_buffer_init(pv->output.pix_fmt,
                                    frame->width, frame->height);
-        buf->f.color_prim     = pv->output.color_prim;
-        buf->f.color_transfer = pv->output.color_transfer;
-        buf->f.color_matrix   = pv->output.color_matrix;
-        buf->f.color_range    = pv->output.color_range ;
+        buf->f.color_prim      = pv->output.color_prim;
+        buf->f.color_transfer  = pv->output.color_transfer;
+        buf->f.color_matrix    = pv->output.color_matrix;
+        buf->f.color_range     = pv->output.color_range;
+        buf->f.chroma_location = pv->output.chroma_location;
 
         NLMeansFunctions *functions = &pv->functions;
 

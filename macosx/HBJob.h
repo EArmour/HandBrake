@@ -29,12 +29,13 @@ extern NSString *HBChaptersChangedNotification;
  */
 @interface HBJob : NSObject <NSSecureCoding, NSCopying, HBPresetCoding, HBSecurityScope>
 
-- (instancetype)initWithTitle:(HBTitle *)title andPreset:(HBPreset *)preset;
-
-- (void)applyPreset:(HBPreset *)preset;
+- (nullable instancetype)initWithTitle:(HBTitle *)title preset:(HBPreset *)preset;
 
 @property (nonatomic, readwrite, weak, nullable) HBTitle *title;
 @property (nonatomic, readonly) int titleIdx;
+
+// Whether the source is a single file or a DVD-Video/Blu-ray
+@property (nonatomic, readonly, getter=isStream) BOOL stream;
 
 @property (nonatomic, readwrite, copy) NSString *presetName;
 

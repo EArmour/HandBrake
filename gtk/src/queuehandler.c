@@ -1,7 +1,7 @@
 /* -*- Mode: C; indent-tabs-mode: t; c-basic-offset: 4; tab-width: 4 -*- */
 /*
  * queuehandler.c
- * Copyright (C) John Stebbins 2008-2021 <stebbins@stebbins>
+ * Copyright (C) John Stebbins 2008-2022 <stebbins@stebbins>
  *
  * queuehandler.c is free software.
  *
@@ -1934,10 +1934,13 @@ void ghb_finalize_job(GhbValue *settings)
     job    = ghb_dict_get(settings, "Job");
 
     // Add scale filter since the above does not
-    GhbValue *filter_list, *filter_dict;
+    GhbValue *filter_settings, *filter_list, *filter_dict;
     int width, height, crop[4];
 
-    filter_list = ghb_get_job_filter_list(settings);
+    filter_settings = ghb_get_job_filter_settings(settings);
+    filter_list = ghb_array_new();
+    ghb_dict_set(filter_settings, "FilterList", filter_list);
+
     width = ghb_dict_get_int(settings, "scale_width");
     height = ghb_dict_get_int(settings, "scale_height");
 
