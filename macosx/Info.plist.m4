@@ -55,6 +55,8 @@ dnl
 	<string>????</string>
 	<key>CFBundleVersion</key>
 	<string>__HB_build</string>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.video</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>${MACOSX_DEPLOYMENT_TARGET}</string>
 	<key>NSHumanReadableCopyright</key>
@@ -68,8 +70,14 @@ GPLv2 license.</string>
 	<string>__HB_url_appcast</string>
 	<key>SUPublicDSAKeyFile</key>
 	<string>dsa_pub.pem</string>
+	<key>SUPublicEDKey</key>
+	<string>aeDqvDkdHhSaNiWXf13dD72+hwWhLz6jD4sdHGP+Vbg=</string>
 	<key>SUAllowsAutomaticUpdates</key>
 	<false/>
+	<key>SUEnableDownloaderService</key>
+	<true />
+	<key>SUEnableInstallerLauncherService</key>
+	<true />
 	<key>NSUserNotificationAlertStyle</key>
 	<string>alert</string>
 	<key>NSAppleEventsUsageDescription</key>

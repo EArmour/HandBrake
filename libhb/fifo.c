@@ -1,6 +1,7 @@
 /* fifo.c
 
    Copyright (c) 2003-2022 HandBrake Team
+   Copyright 2022 NVIDIA Corporation
    This file is part of the HandBrake source code
    Homepage: <http://handbrake.fr/>.
    It may be used under the terms of the GNU General Public License v2.
@@ -16,7 +17,8 @@
 #endif
 
 #ifndef SYS_DARWIN
-#if defined( SYS_FREEBSD ) || defined ( __FreeBSD__ ) || defined(SYS_NETBSD)
+#if defined( SYS_FREEBSD ) || defined ( __FreeBSD__ ) || defined(SYS_NETBSD) || \
+    defined( SYS_OPENBSD ) || defined ( __OpenBSD__ )
 #include <stdlib.h>
 #else
 #include <malloc.h>
@@ -584,6 +586,12 @@ hb_buffer_t * hb_frame_buffer_init( int pix_fmt, int width, int height )
     buf->f.fmt = pix_fmt;
 
     hb_buffer_init_planes(buf);
+
+#if HB_PROJECT_FEATURE_NVENC
+    if (AV_PIX_FMT_CUDA == pix_fmt)
+        buf->hw_ctx.frame = av_frame_alloc();
+#endif
+
     return buf;
 }
 
@@ -618,9 +626,12 @@ void hb_frame_buffer_blank_stride(hb_buffer_t * buf)
 
 void hb_frame_buffer_mirror_stride(hb_buffer_t * buf)
 {
+    const AVPixFmtDescriptor * desc = av_pix_fmt_desc_get(buf->f.fmt);
     uint8_t * data;
     int       pp, ii, yy, width, height, stride, height_stride;
-    int       pos, margin, margin_front, margin_back;
+    int       bps, pos, margin, margin_front, margin_back;
+
+    bps = desc->comp[0].depth > 8 ? 2 : 1;
 
     for (pp = 0; pp <= buf->f.max_plane; pp++)
     {
@@ -631,9 +642,10 @@ void hb_frame_buffer_mirror_stride(hb_buffer_t * buf)
         height_stride = buf->plane[pp].height_stride;
         if (data != NULL)
         {
-            margin       = stride - width;
+            margin       = stride / bps - width;
             margin_front = margin / 2;
             margin_back  = margin - margin_front;
+            width       *= bps;
             for (yy = 0; yy < height; yy++)
             {
                 // Mirror final row pixels into front of stride region
@@ -753,6 +765,11 @@ void hb_buffer_close( hb_buffer_t ** _b )
             hb_qsv_flush_stages(b->qsv_details.ctx->pipes,
                                 (hb_qsv_list**)&b->qsv_details.qsv_atom);
         }
+#endif
+
+#if HB_PROJECT_FEATURE_NVENC
+        if (b->hw_ctx.frame)
+            av_frame_free((AVFrame**)&b->hw_ctx.frame);
 #endif
 
         hb_buffer_t * next = b->next;

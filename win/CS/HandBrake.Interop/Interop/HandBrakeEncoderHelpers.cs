@@ -17,7 +17,6 @@ namespace HandBrake.Interop.Interop
     using HandBrake.Interop.Interop.Helpers;
     using HandBrake.Interop.Interop.Interfaces.Model;
     using HandBrake.Interop.Interop.Interfaces.Model.Encoders;
-    using HandBrake.Interop.Utilities;
 
     public static class HandBrakeEncoderHelpers
     {
@@ -202,11 +201,28 @@ namespace HandBrake.Interop.Interop
             return AudioEncoders.SingleOrDefault(e => e.Id == codecId);
         }
 
+        /// <summary>
+        /// Gets the default audio encoder for the given container.
+        /// </summary>
+        /// <param name="muxer">The container ID.</param>
+        /// <returns>The codec ID of the default audio encoder.</returns>
+        public static int GetDefaultAudioEncoder(int muxer)
+        {
+            return HBFunctions.hb_audio_encoder_get_default(muxer);
+        }
+
         public static HBAudioEncoder GetAutoPassthruEncoder(int inputCodec, int copyMask, int fallback, int muxer)
         {
            int encoder = HBFunctions.hb_autopassthru_get_encoder(inputCodec, copyMask, fallback, muxer);
 
            return GetAudioEncoder(encoder);
+        }
+
+        public static HBAudioEncoder GetPassthruFallback(int passthru)
+        {
+            int encoder = HBFunctions.hb_audio_encoder_get_fallback_for_passthru(passthru);
+
+            return GetAudioEncoder(encoder);
         }
 
         /// <summary>
@@ -221,6 +237,16 @@ namespace HandBrake.Interop.Interop
         public static HBVideoEncoder GetVideoEncoder(string shortName)
         {
             return VideoEncoders.SingleOrDefault(e => e.ShortName == shortName);
+        }
+
+        /// <summary>
+        /// Gets the default video encoder for the given container.
+        /// </summary>
+        /// <param name="muxer">The container ID.</param>
+        /// <returns>The codec ID of the default video encoder.</returns>
+        public static int GetDefaultVideoEncoder(int muxer)
+        {
+            return HBFunctions.hb_video_encoder_get_default(muxer);
         }
 
         /// <summary>
@@ -261,6 +287,18 @@ namespace HandBrake.Interop.Interop
             return Containers.SingleOrDefault(c => c.ShortName == shortName);
         }
 
+        public static bool VideoEncoderSupportsTwoPass(string encoderShortName)
+        {
+            HBVideoEncoder encoder = GetVideoEncoder(encoderShortName);
+
+            if (encoder != null)
+            {
+                return VideoEncoderSupportsTwoPass(encoder.Id);
+            }
+
+            return false;
+        }
+
         /// <summary>
         /// Returns true if the given video encoder supports two-pass mode.
         /// </summary>
@@ -271,9 +309,9 @@ namespace HandBrake.Interop.Interop
         /// True if the given video encoder supports two-pass mode.
         /// </returns>
         public static bool VideoEncoderSupportsTwoPass(int encoderId)
-		{
+        {
             return HBFunctions.hb_video_twopass_is_supported((uint)encoderId) > 0;
-		}
+        }
 
         /// <summary>
         /// Returns true if the subtitle source type can be set to forced only.
@@ -546,6 +584,18 @@ namespace HandBrake.Interop.Interop
 
             return new BitrateLimits(low, high);
         }
+        
+        public static VideoQualityLimits GetVideoQualityLimits(string encoderShortName)
+        {
+            HBVideoEncoder encoder = GetVideoEncoder(encoderShortName);
+
+            if (encoder != null)
+            {
+                return GetVideoQualityLimits(encoder);
+            }
+
+            return null;
+        }
 
         /// <summary>
         /// Gets the video quality limits for the given video codec.
@@ -560,12 +610,24 @@ namespace HandBrake.Interop.Interop
         {
             float low = 0;
             float high = 0;
-            float granularity = 0;
+            float granularity = 0.5f;
             int direction = 0;
 
             HBFunctions.hb_video_quality_get_limits((uint)encoder.Id, ref low, ref high, ref granularity, ref direction);
 
             return new VideoQualityLimits(low, high, granularity, direction == 0);
+        }
+
+        public static string GetVideoQualityRateControlName(string encoderShortName)
+        {
+            HBVideoEncoder encoder = GetVideoEncoder(encoderShortName);
+
+            if (encoder != null)
+            {
+                return InteropUtilities.ToStringFromUtf8Ptr(HBFunctions.hb_video_quality_get_name((uint)encoder.Id));
+            }
+
+            return string.Empty;
         }
 
         /// <summary>
@@ -674,55 +736,14 @@ namespace HandBrake.Interop.Interop
         {
             return HBFunctions.hb_audio_compression_get_default((uint)encoder.Id);
         }
-
-        public static uint BuildCopyMask(bool audioAllowMP2Pass, bool audioAllowMP3Pass, bool audioAllowAACPass, bool audioAllowAC3Pass, bool audioAllowDTSPass, bool audioAllowDTSHDPass, bool audioAllowEac3Pass, bool audioAllowFlacPass, bool audioAllowTruehdPass)
+        
+        public static uint BuildCopyMask(IList<HBAudioEncoder> encoderList)
         {
             uint mask = 0;
-
-            if (audioAllowMP2Pass)
+            foreach (HBAudioEncoder encoder in encoderList)
             {
-                mask |= NativeConstants.HB_ACODEC_MP2_PASS;
-            }
-
-            if (audioAllowMP3Pass)
-            {
-                mask |= NativeConstants.HB_ACODEC_MP3_PASS;
-            }
-
-            if (audioAllowAACPass)
-            {
-                mask |= NativeConstants.HB_ACODEC_AAC_PASS;
-            }
-
-            if (audioAllowAC3Pass)
-            {
-                mask |= NativeConstants.HB_ACODEC_AC3_PASS;
-            }
-
-            if (audioAllowDTSPass)
-            {
-                mask |= NativeConstants.HB_ACODEC_DCA_PASS;
-            }
-
-            if (audioAllowDTSHDPass)
-            {
-                mask |= NativeConstants.HB_ACODEC_DCA_HD_PASS;
-            }
-
-            if (audioAllowEac3Pass)
-            {
-                mask |= NativeConstants.HB_ACODEC_EAC3_PASS;
-            }
-
-            if (audioAllowFlacPass)
-            {
-                mask |= NativeConstants.HB_ACODEC_FLAC_PASS;
-            }
-
-            if (audioAllowTruehdPass)
-            {
-                mask |= NativeConstants.HB_ACODEC_TRUEHD_PASS;
-            }
+                mask |= (uint)encoder.Id;
+            }   
 
             return mask;
         }

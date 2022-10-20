@@ -136,6 +136,8 @@ hb_avfilter_graph_init(hb_value_t * settings, hb_filter_init_t * init)
             case HB_VCODEC_QSV_H264:
                 out_alignment = 16;
                 break;
+            case HB_VCODEC_QSV_AV1_10BIT:
+            case HB_VCODEC_QSV_AV1:
             case HB_VCODEC_QSV_H265_10BIT:
             case HB_VCODEC_QSV_H265:
                 out_alignment = 32;
@@ -149,6 +151,22 @@ hb_avfilter_graph_init(hb_value_t * settings, hb_filter_init_t * init)
     else
 #endif
     {
+#if HB_PROJECT_FEATURE_NVENC
+        if (init->nv_hw_ctx.hw_frames_ctx)
+        {
+            par = av_buffersrc_parameters_alloc();
+            par->format = init->pix_fmt;
+            par->frame_rate.num = init->geometry.par.num;
+            par->frame_rate.den = init->time_base.den;
+            par->height = init->geometry.height;
+            par->hw_frames_ctx = av_buffer_ref(init->nv_hw_ctx.hw_frames_ctx);
+            par->sample_aspect_ratio.num = init->geometry.par.num;
+            par->sample_aspect_ratio.den = init->geometry.par.den;
+            par->time_base.num = init->time_base.num;
+            par->time_base.den = init->time_base.den;
+            par->width = init->geometry.width;
+        }
+#endif
         filter_args = hb_strdup_printf(
                     "width=%d:height=%d:pix_fmt=%d:sar=%d/%d:"
                     "time_base=%d/%d:frame_rate=%d/%d",
@@ -339,12 +357,14 @@ void hb_avfilter_combine( hb_list_t * list)
         switch (filter->id)
         {
             case HB_FILTER_AVFILTER:
-            case HB_FILTER_DEINTERLACE:
+            case HB_FILTER_YADIF:
+            case HB_FILTER_BWDIF:
             case HB_FILTER_DEBLOCK:
             case HB_FILTER_CROP_SCALE:
             case HB_FILTER_PAD:
             case HB_FILTER_ROTATE:
             case HB_FILTER_COLORSPACE:
+            case HB_FILTER_GRAYSCALE:
             case HB_FILTER_FORMAT:
             {
                 settings = pv->avfilters;

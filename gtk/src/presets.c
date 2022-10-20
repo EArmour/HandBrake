@@ -256,24 +256,25 @@ ghb_preset_to_settings(GhbValue *settings, GhbValue *preset)
     ghb_dict_set(settings, "scale_width", ghb_value_dup(
         ghb_dict_get_value(settings, "PictureWidth")));
 
-    if (ghb_dict_get_bool(settings, "PictureAutoCrop"))
+    int crop_mode = ghb_dict_get_int(settings, "PictureCropMode");
+
+    switch (crop_mode)
     {
-        ghb_dict_set_string(settings, "crop_mode", "auto");
-    }
-    else
-    {
-        int ct = ghb_dict_get_int(settings, "PictureTopCrop");
-        int cb = ghb_dict_get_int(settings, "PictureBottomCrop");
-        int cl = ghb_dict_get_int(settings, "PictureLeftCrop");
-        int cr = ghb_dict_get_int(settings, "PictureRightCrop");
-        if (ct == 0 && cb == 0 && cl == 0 && cr == 0)
-        {
+        case 0:
+            ghb_dict_set_string(settings, "crop_mode", "auto");
+            break;
+        case 1:
+            ghb_dict_set_string(settings, "crop_mode", "conservative");
+            break;
+        case 2:
             ghb_dict_set_string(settings, "crop_mode", "none");
-        }
-        else
-        {
+            break;
+        case 3:
             ghb_dict_set_string(settings, "crop_mode", "custom");
-        }
+            break;
+        default:
+            ghb_dict_set_string(settings, "crop_mode", "auto");
+            break;
     }
 
     int width, height;
@@ -467,6 +468,10 @@ ghb_preset_to_settings(GhbValue *settings, GhbValue *preset)
                 case HB_ACODEC_FFTRUEHD:
                 case HB_ACODEC_TRUEHD_PASS:
                     ghb_dict_set_bool(settings, "AudioAllowTRUEHDPass", 1);
+                    break;
+                case HB_ACODEC_OPUS:
+                case HB_ACODEC_OPUS_PASS:
+                    ghb_dict_set_bool(settings, "AudioAllowOPUSPass", 1);
                     break;
             }
         }
@@ -1139,30 +1144,6 @@ ghb_prefs_to_settings(GhbValue *settings)
     ghb_dict_copy(settings, dict);
 }
 
-static const gchar*
-get_preset_color(gint type, gboolean is_folder)
-{
-    const gchar *color;
-
-    if (type == HB_PRESET_TYPE_CUSTOM)
-    {
-        color = "DimGray";
-        if (is_folder)
-        {
-            color = "black";
-        }
-    }
-    else
-    {
-        color = "blue";
-        if (is_folder)
-        {
-            color = "Navy";
-        }
-    }
-    return color;
-}
-
 hb_preset_index_t *
 get_selected_path(signal_user_data_t *ud)
 {
@@ -1446,7 +1427,7 @@ ghb_presets_list_init(signal_user_data_t *ud, const hb_preset_index_t *path)
     {
         GhbValue    *dict;
         const gchar *name;
-        const gchar *color;
+        gchar       *custom_name = NULL;
         gint         type;
         const gchar *description;
         gboolean     is_folder;
@@ -1461,17 +1442,21 @@ ghb_presets_list_init(signal_user_data_t *ud, const hb_preset_index_t *path)
         type        = ghb_dict_get_int(dict, "Type");
         is_folder   = ghb_dict_get_bool(dict, "Folder");
         def         = ghb_dict_get_bool(dict, "Default");
-        color       = get_preset_color(type, is_folder);
 
         gtk_tree_store_append(store, &iter, piter);
+        if (is_folder && type == HB_PRESET_TYPE_CUSTOM)
+        {
+            custom_name = g_strdup_printf("Custom %s", name);
+            name = custom_name;
+        }
         gtk_tree_store_set(store, &iter,
                             0, name,
                             1, def ? 800 : 400,
                             2, def ? 2   : 0,
-                            3, color,
-                            4, description,
-                            5, type == HB_PRESET_TYPE_OFFICIAL ? 0 : 1,
+                            3, description,
+                            4, type == HB_PRESET_TYPE_OFFICIAL ? 0 : 1,
                             -1);
+        free(custom_name);
         if (is_folder)
         {
             ghb_presets_list_init(ud, next_path);
@@ -1532,7 +1517,6 @@ presets_list_update_item(
     gint          type;
     gboolean      is_folder;
     gboolean      def;
-    const gchar  *color;
 
     dict = hb_preset_get(path);
     if (dict == NULL)
@@ -1549,15 +1533,13 @@ presets_list_update_item(
     type        = ghb_dict_get_int(dict, "Type");
     is_folder   = ghb_dict_get_bool(dict, "Folder");
     def         = ghb_dict_get_bool(dict, "Default");
-    color       = get_preset_color(type, is_folder);
 
     gtk_tree_store_set(store, &iter,
                         0, name,
                         1, def ? 800 : 400,
                         2, def ? 2   : 0,
-                        3, color,
-                        4, description,
-                        5, type == HB_PRESET_TYPE_OFFICIAL ? 0 : 1,
+                        3, description,
+                        4, type == HB_PRESET_TYPE_OFFICIAL ? 0 : 1,
                         -1);
     if (recurse && is_folder)
     {
@@ -1579,7 +1561,6 @@ presets_list_append(signal_user_data_t *ud, const hb_preset_index_t *path)
     gint               type;
     gboolean           is_folder;
     gboolean           def;
-    const gchar       *color;
 
     folder_path = hb_preset_index_dup(path);
     folder_path->depth--;
@@ -1613,16 +1594,14 @@ presets_list_append(signal_user_data_t *ud, const hb_preset_index_t *path)
     type        = ghb_dict_get_int(dict, "Type");
     is_folder   = ghb_dict_get_bool(dict, "Folder");
     def         = ghb_dict_get_bool(dict, "Default");
-    color       = get_preset_color(type, is_folder);
 
     gtk_tree_store_append(store, &iter, piter);
     gtk_tree_store_set(store, &iter,
                         0, name,
                         1, def ? 800 : 400,
                         2, def ? 2   : 0,
-                        3, color,
-                        4, description,
-                        5, type == HB_PRESET_TYPE_OFFICIAL ? 0 : 1,
+                        3, description,
+                        4, type == HB_PRESET_TYPE_OFFICIAL ? 0 : 1,
                         -1);
     if (is_folder)
     {
@@ -1722,6 +1701,10 @@ GhbValue* ghb_create_copy_mask(GhbValue *settings)
     {
         ghb_array_append(copy_mask, ghb_string_value_new("copy:truehd"));
     }
+    if (ghb_dict_get_bool(settings, "AudioAllowOPUSPass"))
+    {
+        ghb_array_append(copy_mask, ghb_string_value_new("copy:opus"));
+    }
     return copy_mask;
 }
 
@@ -1746,9 +1729,30 @@ ghb_settings_to_preset(GhbValue *settings)
     g_free(rot_flip);
 
     const gchar * crop_mode;
+    int autocrop, conservativecrop, customcrop;
 
     crop_mode = ghb_dict_get_string(settings, "crop_mode");
-    ghb_dict_set_bool(preset, "PictureAutoCrop", !strcmp(crop_mode, "auto"));
+
+    autocrop         = !strcmp(crop_mode, "auto");
+    conservativecrop = !strcmp(crop_mode, "conservative");
+    customcrop       = !strcmp(crop_mode, "custom");
+
+    if (autocrop)
+    {
+        ghb_dict_set_int(preset, "PictureCropMode", 0);
+    }
+    else if (conservativecrop)
+    {
+        ghb_dict_set_int(preset, "PictureCropMode", 1);
+    }
+    else if (customcrop)
+    {
+        ghb_dict_set_int(preset, "PictureCropMode", 3);
+    }
+    else
+    {
+        ghb_dict_set_int(preset, "PictureCropMode", 2);
+    }
 
     // VideoQualityType/0/1/2 - vquality_type_/target/bitrate/constant
     // *note: target is no longer used
@@ -1803,7 +1807,7 @@ ghb_settings_to_preset(GhbValue *settings)
         sep = ",";
     }
     int encoder = ghb_get_video_encoder(settings);
-    if (encoder & HB_VCODEC_X264_MASK)
+    if (encoder & (HB_VCODEC_X264_MASK | HB_VCODEC_SVT_AV1_MASK))
     {
         if (ghb_dict_get_bool(preset, "x264FastDecode"))
         {

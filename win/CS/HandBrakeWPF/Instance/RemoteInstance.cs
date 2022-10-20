@@ -19,6 +19,7 @@ namespace HandBrakeWPF.Instance
     using System.Threading;
     using System.Threading.Tasks;
 
+    using HandBrake.App.Core.Utilities;
     using HandBrake.Interop.Interop.Interfaces;
     using HandBrake.Interop.Interop.Interfaces.EventArgs;
     using HandBrake.Interop.Interop.Json.Encode;
@@ -341,7 +342,7 @@ namespace HandBrakeWPF.Instance
                                       {
                                           EnableDiskLogging = false,
                                           AllowDisconnectedWorker = false,
-                                          DisableLibDvdNav = !this.userSettingService.GetUserSetting<bool>(UserSettingConstants.DisableLibDvdNav),
+                                          EnableLibDvdNav = !this.userSettingService.GetUserSetting<bool>(UserSettingConstants.DisableLibDvdNav),
                                           EnableHardwareAcceleration = true,
                                           LogDirectory = DirectoryUtilities.GetLogDirectory(),
                                           LogVerbosity = this.userSettingService.GetUserSetting<int>(UserSettingConstants.Verbosity)

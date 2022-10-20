@@ -43,12 +43,12 @@
 - (hb_job_t *)hb_job
 {
     NSAssert(self.title, @"HBJob: calling hb_job without a valid title loaded");
-    NSAssert(self.completeOutputURL, @"HBJob: calling hb_job without a valid destination");
+    NSAssert(self.destinationURL, @"HBJob: calling hb_job without a valid destination");
 
     hb_title_t *title = self.title.hb_title;
     hb_job_t *job = hb_job_init(title);
 
-    hb_job_set_file(job, self.completeOutputURL.fileSystemRepresentation);
+    hb_job_set_file(job, self.destinationURL.fileSystemRepresentation);
 
     // Title Angle for dvdnav
     job->angle = self.angle;
@@ -356,6 +356,10 @@
     {
         job->acodec_copy_mask |= HB_ACODEC_MP3_PASS;
     }
+    if (audioDefaults.allowOpusPassthru)
+    {
+        job->acodec_copy_mask |= HB_ACODEC_OPUS_PASS;
+    }
     if (audioDefaults.allowTrueHDPassthru)
     {
         job->acodec_copy_mask |= HB_ACODEC_TRUEHD_PASS;
@@ -458,7 +462,11 @@
         int filter_id = HB_FILTER_DECOMB;
         if ([self.filters.deinterlace isEqualToString:@"deinterlace"])
         {
-            filter_id = HB_FILTER_DEINTERLACE;
+            filter_id = HB_FILTER_YADIF;
+        }
+        else if ([self.filters.deinterlace isEqualToString:@"bwdif"])
+        {
+            filter_id = HB_FILTER_BWDIF;
         }
 
         hb_dict_t *filter_dict = hb_generate_filter_settings(filter_id,

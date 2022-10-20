@@ -27,13 +27,19 @@ NS_ASSUME_NONNULL_BEGIN
 /**
  *  Returns the default destination URL
  */
-+ (nullable NSURL *)defaultDestinationURL;
++ (nullable NSURL *)defaultDestinationFolderURL;
 
 
 /**
- * Returns the url of the current version documentation.
+ * Returns the url of the documentation.
  */
 @property (nonatomic, readonly, class) NSURL *documentationURL;
+
+
+/**
+ * Returns the url of the current English version documentation.
+ */
+@property (nonatomic, readonly, class) NSURL *documentationBaseURL;
 
 /**
  *  Writes a message to standard error.

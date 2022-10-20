@@ -43,7 +43,7 @@
 #include <gudev/gudev.h>
 #endif
 
-#if defined( __FreeBSD__ )
+#if defined( __FreeBSD__ ) || defined(__OpenBSD__)
 #include <sys/socket.h>
 #endif
 #include <netinet/in.h>
@@ -2468,8 +2468,8 @@ ghb_update_summary_info(signal_user_data_t *ud)
     g_free(text);
 
     // Filters
-    gboolean     detel, comb_detect, deint, decomb, deblock, nlmeans, denoise;
-    gboolean     unsharp, lapsharp, hflip, rot, gray, colorspace, chroma_smooth;
+    gboolean detel, comb_detect, yadif, decomb, deblock, nlmeans, denoise, bwdif;
+    gboolean unsharp, lapsharp, hflip, rot, gray, colorspace, chroma_smooth;
     const char * sval;
 
     sval        = ghb_dict_get_string(ud->settings, "PictureDetelecine");
@@ -2477,7 +2477,8 @@ ghb_update_summary_info(signal_user_data_t *ud)
     sval        = ghb_dict_get_string(ud->settings, "PictureCombDetectPreset");
     comb_detect = sval != NULL && !!strcasecmp(sval, "off");
     sval        = ghb_dict_get_string(ud->settings, "PictureDeinterlaceFilter");
-    deint       = sval != NULL && !strcasecmp(sval, "deinterlace");
+    yadif       = sval != NULL && !strcasecmp(sval, "deinterlace");
+    bwdif       = sval != NULL && !strcasecmp(sval, "bwdif");
     decomb      = sval != NULL && !strcasecmp(sval, "decomb");
     sval        = ghb_dict_get_string(ud->settings, "PictureDeblockPreset");
     deblock     = sval != NULL && !!strcasecmp(sval, "off");
@@ -2510,9 +2511,15 @@ ghb_update_summary_info(signal_user_data_t *ud)
         g_string_append_printf(str, "%s%s", sval, filter->name);
         sval = ", ";
     }
-    if (deint)
+    if (yadif)
     {
-        hb_filter_object_t * filter = hb_filter_get(HB_FILTER_DEINTERLACE);
+        hb_filter_object_t * filter = hb_filter_get(HB_FILTER_YADIF);
+        g_string_append_printf(str, "%s%s", sval, filter->name);
+        sval = ", ";
+    }
+    if (bwdif)
+    {
+        hb_filter_object_t * filter = hb_filter_get(HB_FILTER_BWDIF);
         g_string_append_printf(str, "%s%s", sval, filter->name);
         sval = ", ";
     }
@@ -2657,7 +2664,7 @@ ghb_set_title_settings(signal_user_data_t *ud, GhbValue *settings)
         angle = ghb_dict_get_int(settings, "rotate");
         hflip = ghb_dict_get_int(settings, "hflip");
         hb_rotate_geometry(&srcGeo, &srcGeo, angle, hflip);
-        ghb_apply_crop(settings, &srcGeo);
+        ghb_apply_crop(settings, &srcGeo, title);
 
         int crop[4];
 
@@ -3668,6 +3675,8 @@ generic_entry_changed_cb(GtkEntry *entry, signal_user_data_t *ud)
     }
 }
 
+gboolean prefs_require_restart = FALSE;
+
 G_MODULE_EXPORT void
 preferences_action_cb(GSimpleAction *action, GVariant *param,
                       signal_user_data_t *ud)
@@ -3678,6 +3687,27 @@ preferences_action_cb(GSimpleAction *action, GVariant *param,
     gtk_dialog_run(GTK_DIALOG(dialog));
     gtk_widget_hide(dialog);
     ghb_prefs_store();
+
+    if (prefs_require_restart)
+    {
+        GtkWidget * dialog;
+        GtkWindow * hb_window;
+
+        hb_window = GTK_WINDOW(GHB_WIDGET(ud->builder, "hb_window"));
+
+        // Toss up a warning dialog
+        dialog = gtk_message_dialog_new(hb_window,   GTK_DIALOG_MODAL,
+                                GTK_MESSAGE_WARNING, GTK_BUTTONS_NONE,
+                                "You must restart HandBrake now");
+        gtk_dialog_add_buttons( GTK_DIALOG(dialog),
+                               "Exit HandBrake", GTK_RESPONSE_YES, NULL);
+        gtk_dialog_run(GTK_DIALOG(dialog));
+        gtk_widget_destroy (dialog);
+
+        ghb_hb_cleanup(FALSE);
+        prune_logs(ud);
+        g_application_quit(G_APPLICATION(ud->app));
+    }
 }
 
 typedef struct
@@ -4973,6 +5003,40 @@ use_m4v_changed_cb(GtkWidget *widget, signal_user_data_t *ud)
     const gchar *name = ghb_get_setting_key(widget);
     ghb_pref_set(ud->prefs, name);
     ghb_update_destination_extension(ud);
+}
+
+G_MODULE_EXPORT void
+tmp_dir_enable_changed_cb(GtkWidget *widget, signal_user_data_t *ud)
+{
+    pref_changed_cb(widget, ud);
+    prefs_require_restart = TRUE;
+}
+
+G_MODULE_EXPORT void
+temp_dir_changed_cb(GtkWidget *widget, signal_user_data_t *ud)
+{
+    char * orig_tmp_dir = NULL;
+    const char * tmp_dir;
+
+    tmp_dir = ghb_dict_get_string(ud->prefs, "CustomTmpDir");
+    if (tmp_dir != NULL)
+    {
+        orig_tmp_dir = g_strdup(tmp_dir);
+    }
+    ghb_widget_to_setting (ud->prefs, widget);
+    ghb_check_dependency(ud, widget, NULL);
+
+    tmp_dir = ghb_dict_get_string(ud->prefs, "CustomTmpDir");
+    if (tmp_dir == NULL)
+    {
+        tmp_dir = "";
+    }
+    if (orig_tmp_dir == NULL ||
+        strcmp(orig_tmp_dir, tmp_dir))
+    {
+        ghb_pref_set(ud->prefs, "CustomTmpDir");
+        prefs_require_restart = TRUE;
+    }
 }
 
 G_MODULE_EXPORT void

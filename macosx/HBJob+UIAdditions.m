@@ -297,7 +297,7 @@ static HBMixdownTransformer    *mixdownTransformer;
     [attrString appendString:@"\t"                          withAttributes:detailAttr];
     [attrString appendString:HBKitLocalizedString(@"Destination:", @"Destination description") withAttributes:detailBoldAttr];
     [attrString appendString:@" \t"                         withAttributes:detailAttr];
-    [attrString appendString:self.completeOutputURL.path    withAttributes:detailAttr];
+    [attrString appendString:self.destinationURL.path    withAttributes:detailAttr];
     [attrString appendString:@"\n"                          withAttributes:detailAttr];
 
     return attrString;
@@ -338,7 +338,7 @@ static HBMixdownTransformer    *mixdownTransformer;
     }
     else if (![filters.deinterlace isEqualToString:@"off"])
     {
-        // Deinterlace or Decomb
+        // Deinterlace filters
         NSString *type =  [[[HBFilters deinterlaceTypesDict] allKeysForObject:filters.deinterlace] firstObject];
 
         if ([filters.deinterlacePreset isEqualToString:@"custom"])
@@ -353,7 +353,11 @@ static HBMixdownTransformer    *mixdownTransformer;
             }
             else if ([filters.deinterlace isEqualToString:@"deinterlace"])
             {
-                [summary appendFormat:@", %@ (%@)", type, [[[HBFilters deinterlacePresetsDict] allKeysForObject:filters.deinterlacePreset] firstObject]];
+                [summary appendFormat:@", %@ (%@)", type, [[[HBFilters yadifPresetsDict] allKeysForObject:filters.deinterlacePreset] firstObject]];
+            }
+            else if ([filters.deinterlace isEqualToString:@"bwdif"])
+            {
+                [summary appendFormat:@", %@ (%@)", type, [[[HBFilters bwdifPresetsDict] allKeysForObject:filters.deinterlacePreset] firstObject]];
             }
         }
     }
@@ -952,7 +956,7 @@ static HBMixdownTransformer    *mixdownTransformer;
     // Deinterlace
     if (![filters.deinterlace isEqualToString:@"off"])
     {
-        // Deinterlace or Decomb
+        // Deinterlace filters
         NSString *type = [[[HBFilters deinterlaceTypesDict] allKeysForObject:filters.deinterlace] firstObject];
         if (type)
         {

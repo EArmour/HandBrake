@@ -66,6 +66,13 @@ typedef struct hb_qsv_info_s
 #define HB_QSV_CAP_LOWPOWER_ENCODE   (1LL <<  2)
     // mfxExtVideoSignalInfo
 #define HB_QSV_CAP_VUI_VSINFO        (1LL <<  3)
+    // mfxExtChromaLocInfo
+#define HB_QSV_CAP_VUI_CHROMALOCINFO (1LL <<  4)
+    // mfxExtMasteringDisplayColourVolume
+#define HB_QSV_CAP_VUI_MASTERINGINFO (1LL <<  5)
+    // mfxExtContentLightLevelInfo
+#define HB_QSV_CAP_VUI_CLLINFO       (1LL <<  6)
+
     // optional rate control methods
 #define HB_QSV_CAP_RATECONTROL_LA    (1LL << 10)
 #define HB_QSV_CAP_RATECONTROL_LAi   (1LL << 11)
@@ -83,11 +90,16 @@ typedef struct hb_qsv_info_s
 #define HB_QSV_CAP_OPTION2_NMPSLICE  (1LL << 37)
 #define HB_QSV_CAP_VPP_SCALING       (1LL << 38)
 #define HB_QSV_CAP_VPP_INTERPOLATION (1LL << 39)
+    // mfxExtAV1BitstreamParam
+#define HB_QSV_CAP_AV1_BITSTREAM     (1LL << 40)
+    // mfxExtHyperModeParam
+#define HB_QSV_CAP_HYPERENCODE       (1LL << 41)
 
     // TODO: add maximum encode resolution, etc.
 } hb_qsv_info_t;
 
 /* Intel Quick Sync Video utilities */
+int            hb_qsv_create_mfx_session(mfxIMPL implementation, int adapter_index, mfxVersion *pver, mfxSession *psession, mfxLoader *ploader);
 hb_display_t * hb_qsv_display_init(void);
 int            hb_qsv_video_encoder_is_enabled(int adapter_index, int encoder);
 int            hb_qsv_audio_encoder_is_enabled(int encoder);
@@ -142,6 +154,7 @@ enum
     QSV_G6, // Kaby Lake or equivalent
     QSV_G7, // Ice Lake or equivalent
     QSV_G8, // Tiger Lake or equivalent
+    QSV_G9, // DG2 or equivalent
     QSV_FU, // always last (future processors)
 };
 
@@ -160,6 +173,9 @@ typedef struct
      * MFX_EXTBUFF_OPAQUE_SURFACE_ALLOCATION
      * MFX_EXTBUFF_PICTURE_TIMING_SEI
      * MFX_EXTBUFF_VIDEO_SIGNAL_INFO
+     * MFX_EXTBUFF_CHROMA_LOC_INFO
+     * MFX_EXTBUFF_MASTERING_DISPLAY_COLOUR_VOLUME
+     * MFX_EXTBUFF_CONTENT_LIGHT_LEVEL_INFO
      *
      * This should cover all encode-compatible extended
      * buffers that can be attached to an mfxVideoParam.
@@ -169,6 +185,11 @@ typedef struct
     mfxExtCodingOption    codingOption;
     mfxExtCodingOption2   codingOption2;
     mfxExtVideoSignalInfo videoSignalInfo;
+    mfxExtHyperModeParam hyperEncodeParam;
+    mfxExtChromaLocInfo   chromaLocInfo;
+    mfxExtMasteringDisplayColourVolume masteringDisplayColourVolume;
+    mfxExtContentLightLevelInfo        contentLightLevelInfo;
+    mfxExtAV1BitstreamParam av1BitstreamParam;
     struct
     {
         int b_pyramid;
@@ -237,6 +258,7 @@ const char* hb_qsv_frametype_name(uint16_t qsv_frametype);
 uint8_t     hb_qsv_frametype_xlat(uint16_t qsv_frametype, uint16_t *out_flags);
 
 const char* hb_qsv_impl_get_name(int impl);
+int         hb_qsv_impl_get_num(int impl);
 const char* hb_qsv_impl_get_via_name(int impl);
 mfxIMPL     hb_qsv_dx_index_to_impl(int dx_index);
 
@@ -269,7 +291,8 @@ int hb_qsv_decode_h264_is_supported(int adapter_index);
 int hb_qsv_decode_h265_is_supported(int adapter_index);
 int hb_qsv_decode_h265_10_bit_is_supported(int adapter_index);
 int hb_qsv_decode_av1_is_supported(int adapter_index);
-int hb_qsv_decode_codec_supported_codec(int adapter_index, int video_codec_param, int pix_fmt);
+int hb_qsv_decode_codec_supported_codec(int adapter_index, int video_codec_param, int pix_fmt, int width, int height);
+int hb_qsv_device_init(hb_job_t *job);
 
 #endif // __LIBHB__
 #endif // HB_PROJECT_FEATURE_QSV

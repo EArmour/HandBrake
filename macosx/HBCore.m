@@ -291,9 +291,10 @@ HB_OBJC_DIRECT_MEMBERS
 
     [self preventAutoSleep];
 
-    hb_scan(_hb_handle, url.fileSystemRepresentation,
-            (int)index, (int)previewsNum,
-            keepPreviews, min_title_duration_ticks);
+    hb_scan2(_hb_handle, url.fileSystemRepresentation,
+              (int)index, (int)previewsNum,
+              keepPreviews, min_title_duration_ticks,
+              0, 0);
 
     // Start the timer to handle libhb state changes
     [self startUpdateTimerWithInterval:0.2];
@@ -422,14 +423,14 @@ HB_OBJC_DIRECT_MEMBERS
 
     // Add the job to libhb
     hb_job_t *hb_job = job.hb_job;
-    hb_job_set_file(hb_job, job.completeOutputURL.fileSystemRepresentation);
+    hb_job_set_file(hb_job, job.destinationURL.fileSystemRepresentation);
     hb_add(_hb_handle, hb_job);
 
     // Free the job
     hb_job_close(&hb_job);
 
     [self preventAutoSleep];
-    [self startProgressReporting:job.completeOutputURL];
+    [self startProgressReporting:job.destinationURL];
     hb_start(_hb_handle);
 
     // Start the timer to handle libhb state changes
@@ -440,7 +441,7 @@ HB_OBJC_DIRECT_MEMBERS
     // waiting for libhb to set it in a background thread.
     self.state = HBStateWorking;
 
-    [HBUtilities writeToActivityLog:"%s started encoding %s", self.name.UTF8String, job.outputFileName.UTF8String];
+    [HBUtilities writeToActivityLog:"%s started encoding %s", self.name.UTF8String, job.destinationFileName.UTF8String];
     [HBUtilities writeToActivityLog:"%s with preset %s", self.name.UTF8String, job.presetName.UTF8String];
 }
 

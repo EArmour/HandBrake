@@ -327,13 +327,6 @@ hb_title_t * hb_bd_title_scan( hb_bd_t * d, int tt, uint64_t min_duration )
 
     hb_log( "bd: playlist %05d.MPLS", ti->playlist );
     title->playlist = ti->playlist;
-
-    uint64_t pkt_count = 0;
-    for ( ii = 0; ii < ti->clip_count; ii++ )
-    {
-        pkt_count += ti->clips[ii].pkt_count;
-    }
-
     title->angle_count = ti->angle_count;
 
     /* Get duration */
@@ -661,7 +654,7 @@ hb_title_t * hb_bd_title_scan( hb_bd_t * d, int tt, uint64_t min_duration )
         chapter = calloc( sizeof( hb_chapter_t ), 1 );
 
         chapter->index = ++jj;
-        sprintf( chapter_title, "Chapter %d", chapter->index );
+        snprintf( chapter_title, sizeof(chapter_title), "Chapter %d", chapter->index );
         hb_chapter_set_title( chapter, chapter_title );
 
         chapter->duration = ti->chapters[ii].duration;

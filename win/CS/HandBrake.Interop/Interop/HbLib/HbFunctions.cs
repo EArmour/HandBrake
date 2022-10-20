@@ -174,6 +174,9 @@ namespace HandBrake.Interop.Interop.HbLib
         [DllImport("hb", EntryPoint = "hb_autopassthru_get_encoder", CallingConvention = CallingConvention.Cdecl)]
         public static extern int hb_autopassthru_get_encoder(int in_codec, int copy_mask, int fallback, int muxer);
 
+        [DllImport("hb", EntryPoint = "hb_audio_encoder_get_fallback_for_passthru", CallingConvention = CallingConvention.Cdecl)]
+        public static extern int hb_audio_encoder_get_fallback_for_passthru(int passthru);
+        
         [DllImport("hb", EntryPoint = "hb_mixdown_is_supported", CallingConvention = CallingConvention.Cdecl)]
         public static extern int hb_mixdown_is_supported(int mixdown, uint codec, ulong layout);
 
@@ -195,8 +198,14 @@ namespace HandBrake.Interop.Interop.HbLib
         [DllImport("hb", EntryPoint = "hb_video_encoder_get_next", CallingConvention = CallingConvention.Cdecl)]
         public static extern IntPtr hb_video_encoder_get_next(IntPtr last);
 
+        [DllImport("hb", EntryPoint = "hb_video_encoder_get_default", CallingConvention = CallingConvention.Cdecl)]
+        public static extern int hb_video_encoder_get_default(int muxer);
+
         [DllImport("hb", EntryPoint = "hb_audio_encoder_get_next", CallingConvention = CallingConvention.Cdecl)]
         public static extern IntPtr hb_audio_encoder_get_next(IntPtr last);
+
+        [DllImport("hb", EntryPoint = "hb_audio_encoder_get_default", CallingConvention = CallingConvention.Cdecl)]
+        public static extern int hb_audio_encoder_get_default(int muxer);
 
         [DllImport("hb", EntryPoint = "hb_container_get_next", CallingConvention = CallingConvention.Cdecl)]
         public static extern IntPtr hb_container_get_next(IntPtr last);
@@ -256,6 +265,9 @@ namespace HandBrake.Interop.Interop.HbLib
 
         [DllImport("hb", EntryPoint = "hb_nvenc_h265_available", CallingConvention = CallingConvention.Cdecl)]
         public static extern int hb_nvenc_h265_available();
+
+        [DllImport("hb", EntryPoint = "hb_check_nvdec_available", CallingConvention = CallingConvention.Cdecl)]
+        public static extern int hb_check_nvdec_available();
 
         [DllImport("hb", EntryPoint = "hb_image_close", CallingConvention = CallingConvention.Cdecl)]
         public static extern IntPtr hb_image_close(IntPtr image);

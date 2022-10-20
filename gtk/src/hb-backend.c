@@ -197,9 +197,10 @@ combo_opts_t vqual_granularity_opts =
 
 static options_map_t d_deint_opts[] =
 {
-    {N_("Off"),         "off",         HB_FILTER_INVALID    },
-    {N_("Decomb"),      "decomb",      HB_FILTER_DECOMB     },
-    {N_("Yadif"),       "deinterlace", HB_FILTER_DEINTERLACE},
+    {N_("Off"),         "off",         HB_FILTER_INVALID},
+    {N_("Decomb"),      "decomb",      HB_FILTER_DECOMB },
+    {N_("Yadif"),       "deinterlace", HB_FILTER_YADIF  },
+    {N_("Bwdif"),       "bwdif",       HB_FILTER_BWDIF  },
 };
 combo_opts_t deint_opts =
 {
@@ -233,9 +234,10 @@ combo_opts_t sharpen_opts =
 
 static options_map_t d_crop_opts[] =
 {
-    {N_("Automatic"), "auto",   0},
-    {N_("None"),      "none",   1},
-    {N_("Custom"),    "custom", 2},
+    {N_("None"),         "none",         0},
+    {N_("Conservative"), "conservative", 1},
+    {N_("Automatic"),    "auto",         2},
+    {N_("Custom"),       "custom",       3},
 };
 combo_opts_t crop_opts =
 {
@@ -1012,6 +1014,9 @@ ghb_vquality_default(signal_user_data_t *ud)
     case HB_VCODEC_FFMPEG_MPEG2:
     case HB_VCODEC_FFMPEG_MPEG4:
         return 3;
+    case HB_VCODEC_FFMPEG_SVT_AV1_8BIT:
+    case HB_VCODEC_FFMPEG_SVT_AV1_10BIT:
+        return 30;
     default:
     {
         float min, max, step;
@@ -2593,7 +2598,7 @@ video_tune_opts_set(signal_user_data_t *ud, const gchar *name,
 
     for (ii = 0; ii < count; ii++)
     {
-        if (((encoder & HB_VCODEC_X264_MASK) &&
+        if (((encoder & (HB_VCODEC_X264_MASK | HB_VCODEC_SVT_AV1_MASK)) &&
              !strcmp(tunes[ii], "fastdecode")) ||
             ((encoder & (HB_VCODEC_X264_MASK | HB_VCODEC_X265_MASK)) &&
              !strcmp(tunes[ii], "zerolatency")))
@@ -3522,7 +3527,6 @@ void
 ghb_backend_init(gint debug)
 {
     /* Init libhb */
-    hb_global_init();
     h_scan = hb_init( debug );
     h_queue = hb_init( debug );
     h_live = hb_init( debug );
@@ -3933,23 +3937,31 @@ ghb_apply_pad(GhbValue *settings,
 }
 
 void
-ghb_apply_crop(GhbValue *settings, const hb_geometry_crop_t * geo)
+ghb_apply_crop(GhbValue *settings, const hb_geometry_crop_t * geo, const hb_title_t * title)
 {
-    gboolean autocrop, customcrop;
+    gboolean autocrop, conservativecrop, customcrop;
     gint crop[4] = {0,};
 
     const gchar * crop_mode;
 
     crop_mode  = ghb_dict_get_string(settings, "crop_mode");
-    autocrop   = !strcmp(crop_mode, "auto");
-    customcrop = !strcmp(crop_mode, "custom");
+    autocrop         = !strcmp(crop_mode, "auto");
+    conservativecrop = !strcmp(crop_mode, "conservative");
+    customcrop       = !strcmp(crop_mode, "custom");
 
-    if (autocrop)
+    if (title && autocrop)
     {
-        crop[0] = geo->crop[0];
-        crop[1] = geo->crop[1];
-        crop[2] = geo->crop[2];
-        crop[3] = geo->crop[3];
+        crop[0] = title->crop[0];
+        crop[1] = title->crop[1];
+        crop[2] = title->crop[2];
+        crop[3] = title->crop[3];
+    }
+    else if (title && conservativecrop)
+    {
+        crop[0] = title->loose_crop[0];
+        crop[1] = title->loose_crop[1];
+        crop[2] = title->loose_crop[2];
+        crop[3] = title->loose_crop[3];
     }
     else if (customcrop)
     {
@@ -4037,7 +4049,7 @@ ghb_set_scale_settings(signal_user_data_t * ud, GhbValue *settings, gint mode)
     hb_rotate_geometry(&srcGeo, &srcGeo, angle, hflip);
 
     // Apply crop mode to current settings and sanitize crop values
-    ghb_apply_crop(settings, &srcGeo);
+    ghb_apply_crop(settings, &srcGeo, title);
 
     memset(&uiGeo, 0, sizeof(uiGeo));
 
@@ -4465,11 +4477,11 @@ ghb_validate_video(GhbValue *settings, GtkWindow *parent)
         v_unsup = TRUE;
     }
     else if ((mux->format & HB_MUX_MASK_WEBM) &&
-             (vcodec != HB_VCODEC_FFMPEG_VP8 && vcodec != HB_VCODEC_FFMPEG_VP9))
+             (vcodec != HB_VCODEC_FFMPEG_VP8 && vcodec != HB_VCODEC_FFMPEG_VP9 && vcodec != HB_VCODEC_FFMPEG_VP9_10BIT && vcodec != HB_VCODEC_FFMPEG_SVT_AV1 && vcodec != HB_VCODEC_FFMPEG_SVT_AV1_10BIT))
     {
-        // webm only supports vp8 and vp9.
+        // webm only supports vp8, vp9 and av1.
         message = g_strdup_printf(
-                    _("Only VP8 or VP9 is supported in the WebM container.\n\n"
+                    _("Only VP8, VP9 and AV1 is supported in the WebM container.\n\n"
                     "You should choose a different video codec or container.\n"
                     "If you continue, one will be chosen for you."));
         v_unsup = TRUE;

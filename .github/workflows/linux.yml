@@ -7,8 +7,8 @@ jobs:
     name: Build on Ubuntu
     runs-on: ubuntu-20.04
     steps:
-    - uses: actions/checkout@v2
-    - uses: actions/setup-python@v2
+    - uses: actions/checkout@v3
+    - uses: actions/setup-python@v3
 
     - name: Setup Environment
       run: |
@@ -21,6 +21,6 @@ jobs:
 
     - name: Build HandBrake Linux
       run: |
-        ./configure --disable-gtk-update-checks --enable-qsv
+        ./configure --disable-gtk-update-checks --enable-qsv --enable-vce --enable-nvenc --enable-nvdec
         cd build
         make -j 3
