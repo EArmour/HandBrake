@@ -5,51 +5,179 @@
 
 Before updating HandBrake, please make sure there are no pending encodes in the queue, and be sure to make a backup of any custom presets and app preferences you have, as they may not be compatible with newer versions.
 
-Windows users, please make sure to install [Microsoft .NET Desktop Runtime version 6.0.x](https://dotnet.microsoft.com/en-us/download/dotnet/6.0). Read carefully: you need the **DESKTOP** runtime.
+Windows users, please make sure to install [Microsoft .NET Desktop Runtime version 6.0.x](https://dotnet.microsoft.com/en-us/download/dotnet/6.0). Read carefully: you need the **DESKTOP** runtime. You must install .NET 6 even if you have installed .NET 7.
+
+
+## HandBrake 1.7
+
+#### General
+
+- Miscellaneous bug fixes and improvements
+
+#### Video
+
+- Improved HDR Passthru. Preserve HDR10+ and Dolby Vision dynamic metadata
+  - Dolby Vision is supported only when using the x265 10-bit encoder, only the following Dolby Vision profiles and cross compatibility IDs are supported:
+    - 5.0
+    - 7.6 (base layer only, converted to 8.1)
+    - 8.1
+    - 8.4
+  - HDR10+ is supported on both x265 10bit and SVT-AV1 encoders
+- Support for SVT-AV1 multi-pass ABR mode
+
+#### Third-party libraries
+
+- Updated libraries
+  - AMF 1.4.29 (AMD VCN encoding)
+  - FFmpeg 6.0 (decoding and filters)
+  - libdav1d 1.1.0 (AV1 decoding)
+  - libvpx 1.13.0 (VP8/VP9 video encoding)
+
+- New libraries
+  - libdovi (Dolby Vision metadata)
+  
+### Mac
+
+### Linux
+
+### Windows
+- Improved Preview window with video playback support. (Supports most, but not all codecs/containers. Requires Microsoft Codec Packs from the Microsoft Store for modern codecs)
+- Improved Autoname Preferences UI and added new options: {width} {height} {quality_type} {encoder_bit_depth} {modification-time} {modification-date}
+- Improved UI on the queue window. 
+  - The left progress panel now can optionally show additional status information. 
+- Improved Preset Panel. 
+  - Queue Manager button replaced by a drop menu of discrete options for quicker access to functionality. 
+  - Optional display of preset description at the bottom of the preset pane.
+- Improved Add Selection window. Sorting feature is now more discoverable. 
+- Miscellaneous bug fixes and improvements
+
+
+## HandBrake 1.6.2
+
+### All platforms
+
+#### Video
+
+- Fix an issue with QSV that could result in the output video being a green screen. (#4842)
+- Fix a green video issue qith QuickSync (#4876)
+- Various fixes and library updates for QuickSync to improve support on Linux (#4958)
+- Switch to using swscale instead of zscale when the resolution isn't mod2. Should fix scan failures in this condition
+
+### Linux
+
+- Fixed multiple QSV device enumeration issue and enable Intel QSV AV1 (hardware) video encoders using Flatpak Intel Media plugin (#4775)
+- Fixed default usage of QSV lowpower mode causing issues if HuC is disabled (#4768)
+
+### Windows
+
+- Fixed an issue with autonaming when using drive based sources (#4859)
+- Fixed Title Specific Scan for drive sources. (#4921)
+- Fix an issue that could cause a preset to show as "modified" when it was not. (#4909, #4908)
+- Fixed an issue with QSV bitrate does not respond to changes of ICQ (#4814)
+- Some reliability improvements in the Process Isolation Feature. 
+- Miscellaneous other fixes
+
+## HandBrake 1.6.1
+
+### All platforms
+
+#### Video
+
+- Fixed a potential decoder issue that could cause desync with audio (#4788, #4789)
+
+#### Command line interface
+
+- Fixed inability to name external subtitles tracks using --subname
+
+### Mac
+
+- Fixed behavior of quality slider when changing encoders
+
+### Linux
+
+- Fixed translations missing updates as part of 1.6.0 (#4790)
+  - Bulgarian (Български)
+  - Corsican (Corsu)
+  - Dutch (Nederlands)
+  - German (Deutsch)
+  - Spanish (Español)
+- Fixed (partially) Intel QSV hardware detection (#4768)
+- Fixed a potential crash when canceling an Intel QSV encode (#4341)
+- Fixed building with -Werror=format-security by adding missing format strings where needed
+
+### Windows
+
+- Fixed quality slider not allowing negative values for encoders supporting them
+- Fixed issues upgrading presets from older versions (#4820)
+- Fixed a potential graphical interface hang when stopping the queue (#4782)
+- Fixed optical disc drives on the source selection pane not scanning correctly (#4771)
+- Fixed erroneous display of 2-pass check box for Intel QSV AV1 encoder (not yet supported) (#4777)
+- Fixed a build configuration issue that broke version 1.6.0 for Windows on arm64
+- Fixed an issue that prevented NVDEC from being available
+- Fixed passthru audio erroneously falling back to encoding (#4795)
+- Fixed the Save New Preset button incorrectly overwriting recently added presets (#4804)
+
 
 ## HandBrake 1.6.0
 
 ### All platforms
 
+#### General
+
+- Added AV1 video encoding
+- Added high bit depth and color depth support to various encoders and filters
+- Added 4K AV1 General, QSV (Hardware), and MKV (Matroska) presets
+- Added 4K HEVC General presets and updated related presets to use similar encoder settings
+- Revised Web presets and renamed to Creator, Email, and Social
+- Removed VP8 presets
+  - The VP8 video encoder is now deprecated and will be removed in a future release
+  - Related, the Theora encoder is long deprecated and will be removed in a future release
+- Miscellaneous other preset revisions
+
 #### Video
-- Added AV1 encoder using SVT-AV1
-- Added support for H.264 levels 6, 6.1 and 6.2
-- Added support for 4:2:2/4:4:4 profiles in x264 and x265 encoders
-- Added support for 10-bit VP9 encoder
+
+- Added SVT-AV1 (software) and Intel QSV AV1 (hardware) video encoders
+- Added VP9 10-bit encoder
+- Added NVENC HEVC 10-bit encoder
+- Added VCN HEVC 10-bit encoder
+- Added H.264 levels 6, 6.1, and 6.2 for the x264 encoder
+- Added H.264/H.265 4:2:2 and 4:4:4 profiles for the x264 and x265 encoders
+- Added H.265 4:2:2 profile for VideoToolbox encoder on Apple Silicon
+- Added support for Intel Deep Link Hyper Encode (leverage multiple QSV media engines to increase performance)
+- Fixed longstanding issue where slowest NVENC encoder preset caused encoding failures
+- Removed support for Intel CPUs older than 6th generation (Skylake) when using Intel Quick Sync Video
 
 #### Filters
-- Switched to zscale(zimg) for video scaling with automatic fallback to swscale when required. Should improve performace for ARM based systems
-- Improved Autocrop algorithm which will improve accuracy with mixed aspect ratio content
-- Small performance improvement on high core count systems for comb detect, decomb and nlmeans
-- The following filters have been upgraded to support higher than 8-bit content and 4:2:2/4:4:4 chroma subsampling
+
+- Added Bwdif deinterlace filter
+- Improved Autocrop filter algorithm
+  - Higher accuracy on mixed aspect ratio content, e.g. both letterbox and full frame pictures
+- Improved video scaling performance on Apple Silicon and ARM-based systems
+  - Use zscale (zimg) by default, falling back to swscale where necessary
+- Improved multithread performance (slightly) for the following filters on high core count systems
+  - Comb Detect
+  - Decomb
+  - Denoise
+    - NLMeans
+- Updated the following filters to support higher than 8-bit content and 4:2:2/4:4:4 chroma subsampling
   - Detelecine
   - Comb Detect
   - Decomb
   - Grayscale
-  - Denoise 
+  - Denoise
     - NLMeans
-    - hqdn3d
+    - HQDN3D
   - Chroma Smooth
   - Sharpen
     - UnSharp
     - LapSharp
-- The following new filters were added:  
-  - Deinterlace
-    - Bwidf
-
-#### Hardware Encoding
-- Added support for QuickSync AV1 Encoder
-- Added support for QuickSync HyperEncode
-- Removed support for older Intel CPUs. The minimum requirement is now at least 6th generation (Skylake) when using Intel QuickSync. 
-- Added support for NVEnc 10-bit HEVC encoder.
-- Added support for AMD VCE 10-bit HEVC encoder.
-- Added support for VideoToolbox HEVC 4:2:2 profile on Apple Silicon.
-- Fixed a long standing issue with NVEnc slowest preset causing failed encodes. 
 
 #### Build system
 
-- Added support for OpenBSD (must compile from source)
-
+- Added support for building for OpenBSD
+- Added --cpu configure parameter to enable building for native CPU architecture
+- Added --lto configure parameter to enable link time optimization
+- Miscellaneous bug fixes and improvements
 
 #### Third-party libraries
 
@@ -60,31 +188,58 @@ Windows users, please make sure to install [Microsoft .NET Desktop Runtime versi
   - Fribidi 1.0.12 (subtitles)
   - HarfBuzz 4.4.1 (subtitles)
   - libass 0.16.0 (subtitles)
-  - libbluray 1.3.3 (Blu-ray decoding)
+  - libbluray 1.3.4 (Blu-ray decoding)
   - libdav1d 1.0.0 (AV1 decoding)
   - libdvdread 6.1.3 (DVD decoding)
   - liblzma (xz) 5.2.6 (LZMA video decoding, e.g. TIFF)
   - libjpeg-turbo 2.1.4 (preview image compression)
-  - libspeex 1.2.1  (Speex audio decoding)
-  - libvpx 1.12.0  (VP8/VP9 video encoding)
-  - oneVPL 2022.1.2 (Intel QuickSync Support)
+  - libspeex 1.2.1 (Speex audio decoding)
+  - libvpx 1.12.0 (VP8/VP9 video encoding)
+  - libxml 2.10.3 (general)
+  - oneVPL 2023.1.0 (Intel QSV encoding/decoding)
   - x264 164 r3100 (H.264/AVC video encoding)
+  - x265 r12747 (H.265/HEVC video encoding)
   - zimg 3.0.4 (color conversion)
 - New libraries
-  - SVT-AV1 1.2.1 (AV1 encoding)
+  - SVT-AV1 1.4.1 (AV1 encoding)
 
 ### Linux
+
+- Added many quality of life improvements contributed by community members
+- Improved parity with the Mac and Windows graphical interfaces
 - Miscellaneous bug fixes and improvements
 - Updated translations
+- Added new translations
+  - Bulgarian (Български)
+  - Finnish (Suomi)
+  - Georgian (ქართული)
 
 ### Mac
-- QuickLook support in the Queue
+
+- Added Quick Look support to the queue
 - Miscellaneous bug fixes and improvements
 - Updated translations
+- Added Japanese translation
 
 ### Windows
+
 - Miscellaneous bug fixes and improvements
-- Updated translations
+- Updated all translations
+- Added new translations
+  - Bulgarian (Български)
+  - Dutch (Nederlands)
+  - Polish (Polski)
+
+
+## HandBrake 1.5.1
+
+### Linux
+
+- Fixed an issue with the source tarball that broke Flathub builds (updated libass module to version 0.15.2)
+
+### Windows
+
+- The Windows UI is now .NET 6.0 only; .NET 5.0 is no longer additionally required
 
 
 ## HandBrake 1.5.0

@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+from __future__ import print_function
 import types
 import os
 import sys
@@ -8,10 +9,10 @@ import getopt
 import posixpath
 from collections import OrderedDict
 try:
+    from urllib.parse import urlsplit, unquote
+except ImportError:  # Python 2
     from urlparse import urlsplit
     from urllib import unquote
-except ImportError: # Python 3
-    from urllib.parse import urlsplit, unquote
 
 
 def url2filename(url):
@@ -34,7 +35,7 @@ class SourceEntry:
 
 class FlatpakPluginManifest:
     def __init__(self, runtime, template=None):
-        if template != None:
+        if template is not None and os.path.exists(template):
             with open(template, 'r') as fp:
                 self.manifest = json.load(fp, object_pairs_hook=OrderedDict)
 
@@ -46,7 +47,7 @@ class FlatpakPluginManifest:
 
 class FlatpakManifest:
     def __init__(self, source_list, runtime, qsv, nvenc, template=None):
-        if template != None:
+        if template is not None and os.path.exists(template):
             with open(template, 'r') as fp:
                 self.manifest = json.load(fp, object_pairs_hook=OrderedDict)
 
@@ -69,12 +70,12 @@ class FlatpakManifest:
             self.hbmodule["sources"]     = self.sources
             self.hbconfig                = [None]
 
-        if runtime != None:
+        if runtime is not None:
             self.manifest["runtime-version"] = runtime
 
         if qsv:
             self.hbconfig.append("--enable-qsv");
-        
+
         if nvenc:
             self.hbconfig.append("--enable-nvenc");
             self.hbconfig.append("--enable-nvdec");
@@ -87,7 +88,7 @@ class FlatpakManifest:
             if islocal(value.url):
                 source["path"] = value.url
             else:
-                if value.sha256 == "" or value.sha256 == None:
+                if value.sha256 is None or value.sha256 == "":
                     continue
                 source["url"] = value.url
                 source["sha256"] = value.sha256
@@ -105,7 +106,10 @@ class FlatpakManifest:
             elif value.entry_type == SourceType.contrib:
                 source["type"] = "file"
                 source["dest"] = "download"
-                source["dest-filename"] = url2filename(value.url)
+                if value.basename != None and value.basename != "":
+                    source["dest-filename"] = value.basename
+                else:
+                    source["dest-filename"] = url2filename(value.url)
                 self.sources.append(source)
 
 
@@ -114,6 +118,7 @@ def usage():
     print("     -a --archive    - Main archive (a.k.a. HB sources)")
     print("     -c --contrib    - Contrib download URL (can be repeated)")
     print("     -s --sha256     - sha256 of previous file on command line")
+    print("     -b --basename   - target basename of previous file on command line")
     print("     -t --template   - Flatpak manifest template")
     print("     -r --runtime    - Flatpak SDK runtime version")
     print("     -q --qsv        - Build with Intel QSV support")
@@ -123,8 +128,8 @@ def usage():
 
 if __name__ == "__main__":
     try:
-        opts, args = getopt.getopt(sys.argv[1:], "a:c:s:t:r:qeph",
-            ["archive=", "contrib=", "sha265=",
+        opts, args = getopt.getopt(sys.argv[1:], "a:c:s:b:t:r:qeph",
+            ["archive=", "contrib=", "sha256=", "basename=",
              "template=", "runtime=", "qsv", "nvenc", "plugin", "help"])
     except getopt.GetoptError:
         print("Error: Invalid option")
@@ -149,20 +154,27 @@ if __name__ == "__main__":
             usage()
             sys.exit()
         elif opt in ("-a", "--archive"):
-            if arg != None and arg != "":
+            if arg is not None and arg != "":
                 current_source = arg
                 source_list[arg] = SourceEntry(arg, SourceType.archive)
+                source_list[current_source].sha256 = None
+                source_list[current_source].basename = None
             else:
                 current_source = None
         elif opt in ("-c", "--contrib"):
-            if arg != None and arg != "":
+            if arg is not None and arg != "":
                 current_source = arg
                 source_list[arg] = SourceEntry(arg, SourceType.contrib)
+                source_list[current_source].sha256 = None
+                source_list[current_source].basename = None
             else:
                 current_source = None
         elif opt in ("-s", "--sha256"):
-            if current_source != None:
+            if current_source is not None:
                 source_list[current_source].sha256 = arg
+        elif opt in ("-b", "--basename"):
+            if current_source is not None:
+                source_list[current_source].basename = arg
         elif opt in ("-t", "--template"):
             template = arg
         elif opt in ("-r", "--runtime"):
@@ -172,7 +184,7 @@ if __name__ == "__main__":
 
         elif opt in ("-e", "--nvenc"):
             print("NVENC ON")
-            nvenc = 1; 
+            nvenc = 1;
         elif opt in ("-p", "--plugin"):
             plugin = 1;
 
@@ -186,7 +198,7 @@ if __name__ == "__main__":
     else:
         manifest = FlatpakManifest(source_list, runtime, qsv, nvenc, template)
 
-    if dst != None:
+    if dst is not None:
         with open(dst, 'w') as fp:
             json.dump(manifest.manifest, fp, ensure_ascii=False, indent=4)
     else:

@@ -2371,7 +2371,7 @@ static int syncVideoInit( hb_work_object_t * w, hb_job_t * job)
     w->fifo_in                  = job->fifo_raw;
     w->fifo_out                 = job->fifo_sync;
 
-    if (job->pass_id == HB_PASS_ENCODE_2ND)
+    if (job->pass_id == HB_PASS_ENCODE_FINAL)
     {
         /* We already have an accurate frame count from pass 1 */
         hb_interjob_t * interjob = hb_interjob_get(job->h);
@@ -2532,7 +2532,7 @@ static void syncVideoClose( hb_work_object_t * w )
     }
 
     /* save data for second pass */
-    if( job->pass_id == HB_PASS_ENCODE_1ST )
+    if( job->pass_id == HB_PASS_ENCODE_ANALYSIS )
     {
         /* Preserve frame count for better accuracy in pass 2 */
         hb_interjob_t * interjob = hb_interjob_get( job->h );
@@ -3210,14 +3210,23 @@ static void UpdateState( sync_common_t * common, int frame_count )
                             (common->st_dates[3]  - common->st_dates[0]);
     if (hb_get_date() > common->st_first + 4000)
     {
-        int eta;
         p.rate_avg = 1000.0 * common->st_counts[3] /
                      (common->st_dates[3] - common->st_first - job->st_paused);
-        eta = (common->est_frame_count - common->st_counts[3]) / p.rate_avg;
-        p.eta_seconds = eta;
-        p.hours       = eta / 3600;
-        p.minutes     = (eta % 3600) / 60;
-        p.seconds     = eta % 60;
+        if (common->est_frame_count >= common->st_counts[3])
+        {
+            int eta = (common->est_frame_count - common->st_counts[3]) / p.rate_avg;
+            p.eta_seconds = eta;
+            p.hours       = eta / 3600;
+            p.minutes     = (eta % 3600) / 60;
+            p.seconds     = eta % 60;
+        }
+        else
+        {
+            p.eta_seconds = 0;
+            p.hours    = -1;
+            p.minutes  = -1;
+            p.seconds  = -1;
+        }
     }
     else
     {

@@ -598,6 +598,11 @@ static int parse_adts_extradata( hb_audio_t * audio, AVCodecContext * context,
     AVBSFContext            * ctx = NULL;
     int                       ret;
 
+    if (audio == NULL)
+    {
+        return 1;
+    }
+
     bsf = av_bsf_get_by_name("aac_adtstoasc");
     ret = av_bsf_alloc(bsf, &ctx);
     if (ret < 0)
@@ -763,6 +768,8 @@ static int decavcodecaBSInfo( hb_work_object_t *w, const hb_buffer_t *buf,
             AVPacket *avp = av_packet_alloc();
             avp->data = parse_buffer;
             avp->size = parse_buffer_size;
+            avp->pts  = buf->s.start;
+            avp->dts  = AV_NOPTS_VALUE;
 
             ret = avcodec_send_packet(context, avp);
             if (ret < 0 && ret != AVERROR_EOF)
@@ -1115,26 +1122,38 @@ static hb_buffer_t *copy_frame( hb_work_private_t *pv )
         }
     }
 
-    // Check for HDR mastering data
-    sd = av_frame_get_side_data(pv->frame, AV_FRAME_DATA_MASTERING_DISPLAY_METADATA);
-    if (sd != NULL)
+    if (!pv->job && pv->title)
     {
-        if (!pv->job && pv->title && sd->size > 0)
+        // Check for HDR mastering data
+        sd = av_frame_get_side_data(pv->frame, AV_FRAME_DATA_MASTERING_DISPLAY_METADATA);
+        if (sd != NULL && sd->size > 0)
         {
             AVMasteringDisplayMetadata *mastering = (AVMasteringDisplayMetadata *)sd->data;
             pv->title->mastering = hb_mastering_ff_to_hb(*mastering);
         }
-    }
 
-    // Check for HDR content light level data
-    sd = av_frame_get_side_data(pv->frame, AV_FRAME_DATA_CONTENT_LIGHT_LEVEL);
-    if (sd != NULL)
-    {
-        if (!pv->job && pv->title && sd->size > 0)
+        // Check for HDR content light level data
+        sd = av_frame_get_side_data(pv->frame, AV_FRAME_DATA_CONTENT_LIGHT_LEVEL);
+        if (sd != NULL && sd->size > 0)
         {
             AVContentLightMetadata *coll = (AVContentLightMetadata *)sd->data;
             pv->title->coll.max_cll = coll->MaxCLL;
             pv->title->coll.max_fall = coll->MaxFALL;
+        }
+
+        // Check for HDR Plus dynamic metadata
+        sd = av_frame_get_side_data(pv->frame, AV_FRAME_DATA_DYNAMIC_HDR_PLUS);
+        if (sd != NULL && sd->size > 0)
+        {
+            pv->title->hdr_10_plus = 1;
+        }
+
+        // Check for Ambient Viewing Environment metadata
+        sd = av_frame_get_side_data(pv->frame, AV_FRAME_DATA_AMBIENT_VIEWING_ENVIRONMENT);
+        if (sd != NULL && sd->size > 0)
+        {
+            AVAmbientViewingEnvironment *ambient = (AVAmbientViewingEnvironment *)sd->data;
+            pv->title->ambient = hb_ambient_ff_to_hb(*ambient);
         }
     }
 
@@ -1249,7 +1268,7 @@ int reinit_video_filters(hb_work_private_t * pv)
         {
             hb_dict_set(settings, "w", hb_value_int(orig_width));
             hb_dict_set(settings, "h", hb_value_int(orig_height));
-            hb_avfilter_append_dict(filters, "scale_qsv", settings);
+            hb_avfilter_append_dict(filters, "vpp_qsv", settings);
         }
         else
 #endif
@@ -1265,6 +1284,7 @@ int reinit_video_filters(hb_work_private_t * pv)
         }
         else
 #endif
+        if ((pv->frame->width % 2) == 0 && (pv->frame->height % 2) == 0)
         {
             hb_dict_set(settings, "pix_fmts", hb_value_string(av_get_pix_fmt_name(pix_fmt)));
             hb_avfilter_append_dict(filters, "format", settings);
@@ -1275,6 +1295,20 @@ int reinit_video_filters(hb_work_private_t * pv)
             hb_dict_set_string(settings, "filter", "lanczos");
             hb_dict_set_string(settings, "range", get_range_name(color_range));
             hb_avfilter_append_dict(filters, "zscale", settings);
+        }
+        // Fallback to swscale, zscale requires a mod 2 width and height
+        else
+        {
+            hb_dict_set(settings, "w", hb_value_int(orig_width));
+            hb_dict_set(settings, "h", hb_value_int(orig_height));
+            hb_dict_set(settings, "flags", hb_value_string("lanczos+accurate_rnd"));
+            hb_dict_set_string(settings, "in_range", get_range_name(pv->frame->color_range));
+            hb_dict_set_string(settings, "out_range", get_range_name(color_range));
+            hb_avfilter_append_dict(filters, "scale", settings);
+
+            settings = hb_dict_init();
+            hb_dict_set(settings, "pix_fmts", hb_value_string(av_get_pix_fmt_name(pix_fmt)));
+            hb_avfilter_append_dict(filters, "format", settings);
         }
     }
     if (pv->title->rotation != HB_ROTATION_0)
@@ -1740,12 +1774,13 @@ static int setup_extradata( hb_work_private_t * pv, AVCodecContext * context )
     {
         if (avp->side_data[ii].type == AV_PKT_DATA_NEW_EXTRADATA)
         {
-            context->extradata      = avp->side_data[ii].data;
             context->extradata_size = avp->side_data[ii].size;
-            avp->side_data[ii].data = NULL;
-            avp->side_data[ii].size = 0;
+            context->extradata = av_malloc(context->extradata_size + AV_INPUT_BUFFER_PADDING_SIZE);
+
             if (context->extradata != NULL)
             {
+                memcpy(context->extradata, avp->side_data[ii].data, context->extradata_size);
+                av_packet_unref(avp);
                 return 0;
             }
         }
@@ -2046,7 +2081,7 @@ static void compute_frame_duration( hb_work_private_t *pv )
         // than context->time_base.
         AVFormatContext *ic = (AVFormatContext*)pv->title->opaque_priv;
         AVStream *st = ic->streams[pv->title->video_id];
-        if ( st->nb_frames && st->duration )
+        if (st->nb_frames && st->duration > 0)
         {
             // compute the average frame duration from the total number
             // of frames & the total duration.
@@ -2111,6 +2146,16 @@ static void compute_frame_duration( hb_work_private_t *pv )
         duration = 1001. / 24000.;
     }
     pv->duration = duration * 90000.;
+
+    int clock_min, clock_max, clock;
+    hb_video_framerate_get_limits(&clock_min, &clock_max, &clock);
+    if (pv->duration < 1 / (clock / 90000.))
+    {
+        // Not representable, probably a broken file
+        // use the maximum possible fps
+        pv->duration = 1 / (clock / 90000.);
+    }
+
     pv->field_duration = pv->duration;
     if ( pv->context->ticks_per_frame > 1 )
     {
@@ -2175,7 +2220,7 @@ static int decavcodecvInfo( hb_work_object_t *w, hb_work_info_t *info )
 #if HB_PROJECT_FEATURE_QSV
     if (hb_qsv_available())
     {
-        if (hb_qsv_decode_codec_supported_codec(hb_qsv_get_adapter_index(), pv->context->codec_id, pv->context->pix_fmt, pv->context->width, pv->context->height))
+        if (hb_qsv_decode_is_codec_supported(hb_qsv_get_adapter_index(), pv->context->codec_id, pv->context->pix_fmt, pv->context->width, pv->context->height))
         {
             info->video_decode_support |= HB_DECODE_SUPPORT_QSV;
         }
