@@ -157,18 +157,13 @@ struct hb_buffer_s
     {
         void               * qsv_atom;
         AVFrame            * frame;
-        void               * filter_details;
         hb_qsv_context     * ctx;
         HBQSVFramesContext * qsv_frames_ctx;
     } qsv_details;
 #endif
 
-#if HB_PROJECT_FEATURE_NVENC
-    struct hw_ctx
-    {
-        void *frame;
-    } hw_ctx;
-#endif
+    void  *storage;
+    enum  { STANDARD, AVFRAME, COREMEDIA } storage_type;
 
     // libav may attach AV_PKT_DATA_PALETTE side data to some AVPackets
     // Store this data here when read and pass to decoder.
@@ -185,6 +180,7 @@ struct hb_buffer_s
 void hb_buffer_pool_init( void );
 void hb_buffer_pool_free( void );
 
+hb_buffer_t * hb_buffer_wrapper_init();
 hb_buffer_t * hb_buffer_init( int size );
 hb_buffer_t * hb_buffer_eof_init( void );
 hb_buffer_t * hb_frame_buffer_init( int pix_fmt, int w, int h);
@@ -289,7 +285,7 @@ hb_thread_t * hb_scan_init( hb_handle_t *, volatile int * die,
                             const char * path, int title_index,
                             hb_title_set_t * title_set, int preview_count,
                             int store_previews, uint64_t min_duration,
-                            int crop_auto_switch_threshold, int crop_median_threshold );
+                            int crop_auto_switch_threshold, int crop_median_threshold, hb_list_t * exclude_extensions );
 hb_thread_t * hb_work_init( hb_list_t * jobs,
                             volatile int * die, hb_error_code * error, hb_job_t ** job );
 void ReadLoop( void * _w );
@@ -330,7 +326,7 @@ extern const hb_muxer_t hb_demux[];
  **********************************************************************/
 typedef struct hb_batch_s hb_batch_t;
 
-hb_batch_t  * hb_batch_init( hb_handle_t *h, char * path );
+hb_batch_t  * hb_batch_init( hb_handle_t *h, char * path, hb_list_t * exclude_extensions );
 void          hb_batch_close( hb_batch_t ** _d );
 int           hb_batch_title_count( hb_batch_t * d );
 hb_title_t  * hb_batch_title_scan( hb_batch_t * d, int t );
@@ -497,10 +493,9 @@ extern hb_filter_object_t hb_filter_mt_frame;
 extern hb_filter_object_t hb_filter_colorspace;
 extern hb_filter_object_t hb_filter_format;
 
-#if HB_PROJECT_FEATURE_QSV
-extern hb_filter_object_t hb_filter_qsv;
-extern hb_filter_object_t hb_filter_qsv_pre;
-extern hb_filter_object_t hb_filter_qsv_post;
+#if defined(__APPLE__)
+extern hb_filter_object_t hb_filter_crop_scale_vt;
+extern hb_filter_object_t hb_filter_rotate_vt;
 #endif
 
 extern hb_work_object_t * hb_objects;

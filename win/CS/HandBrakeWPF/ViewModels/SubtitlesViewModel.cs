@@ -265,7 +265,10 @@ namespace HandBrakeWPF.ViewModels
 
             dialog.ShowDialog();
 
-            this.AddInputSubtitles(dialog.FileNames);
+            if (dialog.FileNames != null)
+            {
+                this.AddInputSubtitles(dialog.FileNames);
+            }
         }
 
         public void Import(string[] subtitleFiles)
@@ -770,13 +773,15 @@ namespace HandBrakeWPF.ViewModels
                     continue;
                 }
 
+                string extension = Path.GetExtension(srtFile);
+
                 SubtitleTrack track = new SubtitleTrack
                                           {
                                               SrtFileName = Path.GetFileNameWithoutExtension(srtFile),
                                               SrtOffset = 0,
                                               SrtCharCode = "UTF-8",
                                               SrtLang = "English",
-                                              SubtitleType = SubtitleType.IMPORTSRT,
+                                              SubtitleType = extension.Contains("ass", StringComparison.InvariantCultureIgnoreCase) ? SubtitleType.IMPORTSSA : SubtitleType.IMPORTSRT,
                                               SrtPath = srtFile
                                           };
                 this.Task.SubtitleTracks.Add(track);

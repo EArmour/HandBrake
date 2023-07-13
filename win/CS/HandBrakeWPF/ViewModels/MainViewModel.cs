@@ -29,6 +29,7 @@ namespace HandBrakeWPF.ViewModels
     using HandBrakeWPF.Commands;
     using HandBrakeWPF.Commands.DebugTools;
     using HandBrakeWPF.Commands.Menu;
+    using HandBrakeWPF.Commands.Presets;
     using HandBrakeWPF.EventArgs;
     using HandBrakeWPF.Helpers;
     using HandBrakeWPF.Model;
@@ -193,14 +194,19 @@ namespace HandBrakeWPF.ViewModels
             this.QueueCommand = new QueueCommands(this.QueueViewModel);
             this.ProcessDriveCommand = new SimpleRelayCommand<object>(this.ProcessDrive);
             this.WhenDoneCommand = new SimpleRelayCommand<int>(this.WhenDone);
+            this.PresetClone = new PresetClone(presetService, errorService, windowManager);
 
             // Monitor the system.
             systemService.Start();
-
+            
             this.Load();
         }
 
         public SimpleRelayCommand<int> WhenDoneCommand { get; set; }
+
+        public ICommand PresetClone { get; set; }
+
+        public ICommand PresetMove => new PresetMoveCommand(this, this.presetService);
 
         /* View Model Properties */
 
@@ -1433,6 +1439,11 @@ namespace HandBrakeWPF.ViewModels
         public void TogglePresetPane()
         {
             this.IsPresetPaneDisplayed = !this.IsPresetPaneDisplayed;
+            if (!this.IsPresetPaneDisplayed)
+            {
+                this.presetService.Save(); // Save any updates on close. I.e moves
+            }
+
             this.NotifyOfPropertyChange(() => IsPresetPaneDisplayed);
         }
 
@@ -1473,7 +1484,7 @@ namespace HandBrakeWPF.ViewModels
                 string[] fileNames = e.Data.GetData(DataFormats.FileDrop, true) as string[];
                 if (fileNames != null && fileNames.Any() && (File.Exists(fileNames[0]) || Directory.Exists(fileNames[0])))
                 {
-                    string videoContent = fileNames.FirstOrDefault(f => Path.GetExtension(f)?.ToLower() != ".srt" && Path.GetExtension(f)?.ToLower() != ".ssa");
+                    string videoContent = fileNames.FirstOrDefault(f => Path.GetExtension(f)?.ToLower() != ".srt" && Path.GetExtension(f)?.ToLower() != ".ssa" && Path.GetExtension(f)?.ToLower() != ".ass");
                     if (!string.IsNullOrEmpty(videoContent))
                     {
                         this.StartScan(videoContent, 0);
@@ -1491,7 +1502,7 @@ namespace HandBrakeWPF.ViewModels
                     }
 
                     // StartScan is not synchronous, so for now we don't support adding both srt and video file at the same time. 
-                    string[] subtitleFiles = fileNames.Where(f => Path.GetExtension(f)?.ToLower() == ".srt" || Path.GetExtension(f)?.ToLower() == ".ssa").ToArray();
+                    string[] subtitleFiles = fileNames.Where(f => Path.GetExtension(f)?.ToLower() == ".srt" || Path.GetExtension(f)?.ToLower() == ".ssa" || Path.GetExtension(f)?.ToLower() == ".ass").ToArray();
                     if (subtitleFiles.Any())
                     {
                         this.SwitchTab(5);
@@ -1517,6 +1528,7 @@ namespace HandBrakeWPF.ViewModels
                 CheckPathExists = true, 
                 AddExtension = true, 
                 DefaultExt = ".mp4",
+                RestoreDirectory = true
             };
 
             saveFileDialog.OverwritePrompt =
@@ -1613,7 +1625,7 @@ namespace HandBrakeWPF.ViewModels
         public void PresetAdd()
         {
             IAddPresetViewModel presetViewModel = IoCHelper.Get<IAddPresetViewModel>();
-            presetViewModel.Setup(this.CurrentTask, this.SelectedTitle, this.AudioViewModel.AudioBehaviours, this.SubtitleViewModel.SubtitleBehaviours);
+            presetViewModel.Setup(this.CurrentTask, this.AudioViewModel.AudioBehaviours, this.SubtitleViewModel.SubtitleBehaviours, null);
             bool? result = this.windowManager.ShowDialog<AddPresetView>(presetViewModel);
 
             if (result.HasValue && result.Value)

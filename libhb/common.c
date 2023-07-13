@@ -22,6 +22,7 @@
 #include "handbrake/h265_common.h"
 #include "handbrake/av1_common.h"
 #include "handbrake/encx264.h"
+#include "handbrake/hwaccel.h"
 #if HB_PROJECT_FEATURE_QSV
 #include "handbrake/qsv_common.h"
 #endif
@@ -2326,17 +2327,29 @@ int hb_mixdown_has_remix_support(int mixdown, uint64_t layout)
             return ((layout & AV_CH_LAYOUT_2_1) == AV_CH_LAYOUT_2_1 ||
                     (layout & AV_CH_LAYOUT_2_2) == AV_CH_LAYOUT_2_2 ||
                     (layout & AV_CH_LAYOUT_QUAD) == AV_CH_LAYOUT_QUAD ||
-                    (layout == AV_CH_LAYOUT_STEREO_DOWNMIX &&
-                     mixdown == HB_AMIXDOWN_DOLBY));
+                    (layout == AV_CH_LAYOUT_STEREO_DOWNMIX && // decavcodecaBSInfo tells us the input signals matrix encoding
+                     mixdown == HB_AMIXDOWN_DOLBY)); // allows signaling matrix encoding in output w/encoders that support it
 
         // more than 1 channel
         case HB_AMIXDOWN_STEREO:
             return (hb_layout_get_discrete_channel_count(layout) > 1);
 
-        // regular stereo (not Dolby)
+        /*
+         * The following mixdowns have a very specific purpose!!!
+         *
+         * Given 2-channel input, they allow discarding either of the right or
+         * left channel to produce mono output instead of downmixing (the latter
+         * may clip or lower volume depending on whether the downmix coefficients
+         * are normalized or not). They are meant to be used for sources which
+         * are known to actually be Mono (identical content in the L/R channels
+         * or one of L/R is actually empty). They hardly make any sense when the
+         * input has more than two channels (be they discrete or matrix-encoded).
+         *
+         * Thus specifically only allow them for non-matrix Stereo input (layout == STEREO).
+         */
         case HB_AMIXDOWN_LEFT:
         case HB_AMIXDOWN_RIGHT:
-            return (layout & AV_CH_LAYOUT_STEREO);
+            return (layout == AV_CH_LAYOUT_STEREO);
 
         // mono remix always supported
         // HB_AMIXDOWN_NONE always supported (for Passthru)
@@ -3828,6 +3841,30 @@ void hb_list_close( hb_list_t ** _l )
     *_l = NULL;
 }
 
+/**********************************************************************
+ * hb_string_list_copy
+ **********************************************************************
+ * Make a copy of a string list.
+ *********************************************************************/
+hb_list_t *hb_string_list_copy(const hb_list_t *src)
+{
+    hb_list_t *list = hb_list_init();
+    char *string = NULL;
+
+    if (src)
+    {
+        for (int i = 0; i < hb_list_count(src); i++)
+        {
+            if ((string = hb_list_item(src, i)))
+            {
+                hb_list_add(list, strdup(string));
+            }
+        }
+    }
+    return list;
+}
+
+
 int global_verbosity_level; //Necessary for hb_deep_log
 /**********************************************************************
  * hb_valog
@@ -4207,11 +4244,9 @@ static void job_setup(hb_job_t * job, hb_title_t * title)
     {
         job->qsv.ctx = hb_qsv_context_init();
     }
-    job->qsv.enc_info.is_init_done = 0;
     job->qsv.decode                = !!(title->video_decode_support &
                                         HB_DECODE_SUPPORT_QSV);
 #endif
-
 }
 
 int hb_output_color_prim(hb_job_t * job)
@@ -4605,25 +4640,19 @@ hb_filter_object_t * hb_filter_get( int filter_id )
             filter = &hb_filter_format;
             break;
 
-#if HB_PROJECT_FEATURE_QSV
-#if !HB_QSV_ONEVPL
-        case HB_FILTER_QSV:
-            filter = &hb_filter_qsv;
-            break;
-
-        case HB_FILTER_QSV_PRE:
-            filter = &hb_filter_qsv_pre;
-            break;
-
-        case HB_FILTER_QSV_POST:
-            filter = &hb_filter_qsv_post;
-            break;
-#endif
-#endif
-
         case HB_FILTER_MT_FRAME:
             filter = &hb_filter_mt_frame;
             break;
+
+#if defined(__APPLE__)
+        case HB_FILTER_CROP_SCALE_VT:
+            filter = &hb_filter_crop_scale_vt;
+            break;
+
+        case HB_FILTER_ROTATE_VT:
+            filter = &hb_filter_rotate_vt;
+            break;
+#endif
 
         default:
             filter = NULL;
@@ -6263,37 +6292,22 @@ static int pix_fmt_is_supported(hb_job_t *job, int pix_fmt)
         return 0;
     }
 
-    if (job->title->video_decode_support & HB_DECODE_SUPPORT_QSV)
+    // Allow biplanar formats only if hardware decoder is enabled
+    const int planes_count = av_pix_fmt_count_planes(pix_fmt);
+
+    if (planes_count == 2)
     {
-        // Allow formats supported by QSV pipeline via system memory
-        // at that stage only, video memory formats will be reassigned later if allowed
-        if (pix_fmt != AV_PIX_FMT_YUV420P10 &&
-            pix_fmt != AV_PIX_FMT_YUV420P)
-        {
-            return 0;
-        }
-    }
-#if HB_PROJECT_FEATURE_NVENC
-    else if (hb_nvdec_is_enabled(job))
-    {
-        if (pix_fmt != AV_PIX_FMT_YUV420P10LE &&
-            pix_fmt != AV_PIX_FMT_NV12)
-        {
-            return 0;
-        }
-    }
+        if (hb_hwaccel_decode_is_enabled(job) == 0
+#if HB_PROJECT_FEATURE_QSV
+            && hb_qsv_decode_is_enabled(job) == 0
 #endif
-    else
-    {
-        // Allow biplanar formats only if
-        // hardware decoding is enabled.
-        if (pix_fmt == AV_PIX_FMT_P010 ||
-            pix_fmt == AV_PIX_FMT_NV12)
+            )
         {
             return 0;
         }
     }
 
+    // These filters support only planar pixel formats
     for (int i = 0; i < hb_list_count(job->list_filter); i++)
     {
         hb_filter_object_t *filter = hb_list_item(job->list_filter, i);
@@ -6301,7 +6315,6 @@ static int pix_fmt_is_supported(hb_job_t *job, int pix_fmt)
         switch (filter->id)
         {
             case HB_FILTER_DETELECINE:
-            case HB_FILTER_COMB_DETECT:
             case HB_FILTER_DECOMB:
             case HB_FILTER_YADIF:
             case HB_FILTER_BWDIF:
@@ -6312,8 +6325,7 @@ static int pix_fmt_is_supported(hb_job_t *job, int pix_fmt)
             case HB_FILTER_UNSHARP:
             case HB_FILTER_GRAYSCALE:
             case HB_FILTER_RENDER_SUB:
-               if (pix_fmt == AV_PIX_FMT_P010 ||
-                   pix_fmt == AV_PIX_FMT_NV12)
+               if (planes_count == 2)
                {
                    return 0;
                }
@@ -6325,10 +6337,16 @@ static int pix_fmt_is_supported(hb_job_t *job, int pix_fmt)
 
 static const enum AVPixelFormat pipeline_pix_fmts[] =
 {
-    AV_PIX_FMT_YUV444P12, AV_PIX_FMT_YUV444P10, AV_PIX_FMT_YUV444P,
-    AV_PIX_FMT_YUV422P12, AV_PIX_FMT_YUV422P10, AV_PIX_FMT_YUV422P,
-    AV_PIX_FMT_YUV420P12, AV_PIX_FMT_P010, AV_PIX_FMT_YUV420P10,
-    AV_PIX_FMT_NV12, AV_PIX_FMT_YUV420P, AV_PIX_FMT_NONE
+    AV_PIX_FMT_YUV444P12,
+    AV_PIX_FMT_P410, AV_PIX_FMT_YUV444P10,
+    AV_PIX_FMT_NV24, AV_PIX_FMT_YUV444P,
+    AV_PIX_FMT_YUV422P12,
+    AV_PIX_FMT_P210, AV_PIX_FMT_YUV422P10,
+    AV_PIX_FMT_NV16, AV_PIX_FMT_YUV422P,
+    AV_PIX_FMT_YUV420P12,
+    AV_PIX_FMT_P010, AV_PIX_FMT_YUV420P10,
+    AV_PIX_FMT_NV12, AV_PIX_FMT_YUV420P,
+    AV_PIX_FMT_NONE
 };
 
 int hb_get_best_pix_fmt(hb_job_t * job)
@@ -6345,4 +6363,53 @@ int hb_get_best_pix_fmt(hb_job_t * job)
     }
 
     return AV_PIX_FMT_YUV420P;
+}
+
+static int pix_hw_fmt_is_supported(hb_job_t *job, int pix_fmt)
+{
+    if (pix_fmt == AV_PIX_FMT_QSV)
+    {
+#if HB_PROJECT_FEATURE_QSV
+        if (hb_qsv_full_path_is_enabled(job))
+        {
+            return 1;
+        }
+#endif
+    }
+    else if (hb_hwaccel_is_full_hardware_pipeline_enabled(job))
+    {
+        if (pix_fmt == AV_PIX_FMT_CUDA &&
+            job->hw_decode & HB_DECODE_SUPPORT_NVDEC)
+        {
+            return 1;
+        }
+        if (pix_fmt == AV_PIX_FMT_VIDEOTOOLBOX &&
+            job->hw_decode & HB_DECODE_SUPPORT_VIDEOTOOLBOX)
+        {
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
+static const enum AVPixelFormat hw_pipeline_pix_fmts[] =
+{
+    AV_PIX_FMT_QSV, AV_PIX_FMT_CUDA, AV_PIX_FMT_VIDEOTOOLBOX, AV_PIX_FMT_NONE
+};
+
+int hb_get_best_hw_pix_fmt(hb_job_t *job)
+{
+    const int *pix_fmts = hw_pipeline_pix_fmts;
+
+    while (*pix_fmts != AV_PIX_FMT_NONE)
+    {
+        if (pix_hw_fmt_is_supported(job, *pix_fmts))
+        {
+            return *pix_fmts;
+        }
+        pix_fmts++;
+    }
+
+    return AV_PIX_FMT_NONE;
 }

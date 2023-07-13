@@ -227,15 +227,17 @@ static int avformatInit( hb_mux_object_t * m )
 
     ret = avio_open2(&m->oc->pb, job->file, AVIO_FLAG_WRITE,
                      &m->oc->interrupt_callback, NULL);
-    if( ret < 0 )
+    if (ret < 0)
     {
-      if( ret == -2 ) 
-      {
-        hb_error( "avio_open2 failed, errno -2: Could not write to indicated output file. Please check destination path and file permissions" );
-      }
-      else
-        hb_error( "avio_open2 failed, errno %d", ret);
-      goto error;
+        if (ret == -2)
+        {
+            hb_error("avio_open2 failed, errno -2: Could not write to indicated output file. Please check destination path and file permissions");
+        }
+        else
+        {
+            hb_error("avio_open2 failed, errno %d", ret);
+        }
+        goto error;
     }
 
     /* Video track */
@@ -579,6 +581,19 @@ static int avformatInit( hb_mux_object_t * m )
                                     coll_data,
                                     sizeof(AVContentLightMetadata));
         }
+    }
+
+    if (job->ambient.ambient_illuminance.num && job->ambient.ambient_illuminance.den)
+    {
+        AVAmbientViewingEnvironment ambient = hb_ambient_hb_to_ff(job->ambient);
+
+        uint8_t *ambient_data = av_malloc(sizeof(AVAmbientViewingEnvironment));
+        memcpy(ambient_data, &ambient, sizeof(AVAmbientViewingEnvironment));
+
+        av_stream_add_side_data(track->st,
+                                AV_PKT_DATA_AMBIENT_VIEWING_ENVIRONMENT,
+                                ambient_data,
+                                sizeof(AVAmbientViewingEnvironment));
     }
 
     if (job->passthru_dynamic_hdr_metadata & DOVI)

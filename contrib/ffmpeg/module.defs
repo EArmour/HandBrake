@@ -96,7 +96,7 @@ FFMPEG.CONFIGURE.extra += \
     --enable-muxer=ipod
 
 ifeq (darwin,$(HOST.system))
-    FFMPEG.CONFIGURE.extra += --disable-audiotoolbox --disable-coreimage
+    FFMPEG.CONFIGURE.extra += --disable-audiotoolbox --disable-coreimage --enable-hwaccel=h264_videotoolbox --enable-hwaccel=hevc_videotoolbox --enable-hwaccel=prores_videotoolbox
 
     ifeq (x86_64,$(HOST.arch))
         FFMPEG.CONFIGURE.extra += --arch=x86_64
@@ -117,6 +117,7 @@ else ifeq (1-mingw,$(HOST.cross)-$(HOST.system))
         --target-os=mingw32 \
         --arch=$(HOST.machine) \
         --cross-prefix=$(HOST.cross.prefix) \
+        --disable-vulkan \
         --pkg-config=$(PKGCONFIG.exe) \
         --pkg-config-flags="--static"
     FFMPEG.GCC.args.extra += -fno-common

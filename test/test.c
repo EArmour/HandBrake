@@ -594,8 +594,8 @@ int main( int argc, char ** argv )
 
         hb_system_sleep_prevent(h);
 
-        hb_scan2(h, input, titleindex, preview_count, store_previews,
-                min_title_duration * 90000LL, crop_threshold_frames, crop_threshold_pixels);
+        hb_scan(h, input, titleindex, preview_count, store_previews,
+                min_title_duration * 90000LL, crop_threshold_frames, crop_threshold_pixels, NULL);
 
         EventLoop(h, preset_dict);
         hb_value_free(&preset_dict);
@@ -1501,7 +1501,7 @@ static void ShowHelp(void)
 "                           matching each language will be added to your\n"
 "                           output. Provide the language's ISO 639-2 code\n"
 "                           (e.g. fre, eng, spa, dut, et cetera)\n"
-"                           Use code 'und' (Unknown) to match all languages.\n"
+"                           Use code 'any' to match all languages.\n"
 "       --all-audio         Select all audio tracks matching languages in\n"
 "                           the specified language list (--audio-lang-list).\n"
 "                           Any language if list is not specified.\n"
@@ -2180,7 +2180,6 @@ static int ParseOptions( int argc, char ** argv )
     #define ENCODER_LEVEL_LIST   291
     #define NORMALIZE_MIX        293
     #define AUDIO_DITHER         294
-    #define QSV_BASELINE         295
     #define QSV_ASYNC_DEPTH      296
     #define QSV_ADAPTER          297
     #define QSV_IMPLEMENTATION   298
@@ -2229,7 +2228,6 @@ static int ParseOptions( int argc, char ** argv )
             { "no-dvdnav",   no_argument,       NULL,    DVDNAV },
 
 #if HB_PROJECT_FEATURE_QSV
-            { "qsv-baseline",         no_argument,       NULL,        QSV_BASELINE,       },
             { "qsv-async-depth",      required_argument, NULL,        QSV_ASYNC_DEPTH,    },
             { "qsv-adapter",          required_argument, NULL,        QSV_ADAPTER         },
             { "qsv-implementation",   required_argument, NULL,        QSV_IMPLEMENTATION, },
@@ -3169,9 +3167,6 @@ static int ParseOptions( int argc, char ** argv )
                 } 
                 break;
 #if HB_PROJECT_FEATURE_QSV
-            case QSV_BASELINE:
-                hb_qsv_force_workarounds();
-                break;
             case QSV_ASYNC_DEPTH:
                 qsv_async_depth = atoi(optarg);
                 break;
@@ -3185,8 +3180,13 @@ static int ParseOptions( int argc, char ** argv )
             case HW_DECODE:
                 if( optarg != NULL )
                 {
-                    if( !strcmp( optarg, "nvdec" ) ) {
-                        hw_decode = 4;
+                    if (!strcmp(optarg, "nvdec"))
+                    {
+                        hw_decode = HB_DECODE_SUPPORT_NVDEC;
+                    }
+                    else if (!strcmp(optarg, "videotoolbox"))
+                    {
+                        hw_decode = HB_DECODE_SUPPORT_VIDEOTOOLBOX;
                     }
                     else
                     {
@@ -4388,8 +4388,6 @@ static hb_dict_t * PreparePreset(const char *preset_name)
     else if (crop_mode != NULL && !strcmp(crop_mode, "none")) 
     {
         hb_dict_set(preset, "PictureCropMode",  hb_value_int(2));
-    } else {
-        hb_dict_set(preset, "PictureCropMode",  hb_value_int(0)); // Automatic
     }
 
     if (display_width > 0)

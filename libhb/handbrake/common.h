@@ -138,6 +138,8 @@ void        hb_list_rem( hb_list_t *, void * );
 void      * hb_list_item( const hb_list_t *, int );
 void        hb_list_close( hb_list_t ** );
 
+hb_list_t * hb_string_list_copy(const hb_list_t *src);
+
 void hb_reduce( int *x, int *y, int num, int den );
 void hb_limit_rational( int *x, int *y, int64_t num, int64_t den, int limit );
 void hb_reduce64( int64_t *x, int64_t *y, int64_t num, int64_t den );
@@ -814,16 +816,6 @@ struct hb_job_s
 #if HB_PROJECT_FEATURE_QSV
         hb_qsv_context *ctx;
 #endif
-        // shared encoding parameters
-        // initialized by the QSV encoder, then used upstream (e.g. by filters)
-        // to configure their output so that it matches what the encoder expects
-        struct
-        {
-            int pic_struct;
-            int align_width;
-            int align_height;
-            int is_init_done;
-        } enc_info;
     } qsv;
 
     int hw_decode;
@@ -852,12 +844,9 @@ struct hb_job_s
     int64_t         reader_pts_offset; // Reader can discard some video.
                                        // Other pipeline stages need to know
                                        // this.  E.g. sync and decsrtsub
-#endif
-#if HB_PROJECT_FEATURE_NVENC
-    struct
-    {
-        void *hw_device_ctx;
-    } nv_hw_ctx;
+
+    void           *hw_device_ctx;
+    int             hw_pix_fmt;
 #endif
 };
 
@@ -1222,9 +1211,13 @@ struct hb_title_s
 
     // additional supported video decoders (e.g. HW-accelerated implementations)
     int           video_decode_support;
-#define HB_DECODE_SUPPORT_SW    0x01 // software (libavcodec or mpeg2dec)
-#define HB_DECODE_SUPPORT_QSV   0x02 // Intel Quick Sync Video
-#define HB_DECODE_SUPPORT_NVDEC 0x04 // Nvidia Nvdec
+#define HB_DECODE_SUPPORT_SW             0x01 // software (libavcodec or mpeg2dec)
+#define HB_DECODE_SUPPORT_QSV            0x02 // Intel Quick Sync Video
+#define HB_DECODE_SUPPORT_NVDEC          0x04
+#define HB_DECODE_SUPPORT_VIDEOTOOLBOX   0x08
+
+#define HB_DECODE_SUPPORT_HWACCEL        (HB_DECODE_SUPPORT_NVDEC | HB_DECODE_SUPPORT_VIDEOTOOLBOX)
+#define HB_DECODE_SUPPORT_FORCE_HW       0x80000000
 
     hb_metadata_t * metadata;
 
@@ -1415,6 +1408,7 @@ typedef struct hb_filter_init_s
 {
     hb_job_t      * job;
     int             pix_fmt;
+    int             hw_pix_fmt;
     int             color_prim;
     int             color_transfer;
     int             color_matrix;
@@ -1426,12 +1420,7 @@ typedef struct hb_filter_init_s
     int             cfr;
     int             grayscale;
     hb_rational_t   time_base;
-#if HB_PROJECT_FEATURE_NVENC
-    struct
-    {
-        void *hw_frames_ctx;
-    } nv_hw_ctx;
-#endif
+    void          * hw_frames_ctx;
 } hb_filter_init_t;
 
 typedef struct hb_filter_info_s
@@ -1486,9 +1475,7 @@ struct hb_filter_object_s
 enum
 {
     HB_FILTER_INVALID = 0,
-    // for QSV - important to have before other filters
     HB_FILTER_FIRST = 1,
-    HB_FILTER_QSV_PRE = 1,
 
     // First, filters that may change the framerate (drop or dup frames)
     HB_FILTER_DETELECINE,
@@ -1504,8 +1491,10 @@ enum
     HB_FILTER_NLMEANS,
     HB_FILTER_CHROMA_SMOOTH,
     HB_FILTER_ROTATE,
+    HB_FILTER_ROTATE_VT,
     HB_FILTER_RENDER_SUB,
     HB_FILTER_CROP_SCALE,
+    HB_FILTER_CROP_SCALE_VT,
     HB_FILTER_LAPSHARP,
     HB_FILTER_UNSHARP,
     HB_FILTER_GRAYSCALE,
@@ -1518,11 +1507,7 @@ enum
     // except that they must be after the above filters
     HB_FILTER_AVFILTER,
 
-    // for QSV - important to have as a last one
-    HB_FILTER_QSV_POST,
-    // default MSDK VPP filter
-    HB_FILTER_QSV,
-    HB_FILTER_LAST = HB_FILTER_QSV,
+    HB_FILTER_LAST,
     // wrapper filter for frame based multi-threading of simple filters
     HB_FILTER_MT_FRAME
 };
@@ -1588,6 +1573,7 @@ int hb_output_color_matrix(hb_job_t * job);
 int hb_get_bit_depth(int format);
 int hb_get_chroma_sub_sample(int format, int *h_shift, int *v_shift);
 int hb_get_best_pix_fmt(hb_job_t * job);
+int hb_get_best_hw_pix_fmt(hb_job_t * job);
 
 #define HB_NEG_FLOAT_REG "(([-])?(([0-9]+([.,][0-9]+)?)|([.,][0-9]+))"
 #define HB_FLOAT_REG     "(([0-9]+([.,][0-9]+)?)|([.,][0-9]+))"

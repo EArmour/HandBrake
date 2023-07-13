@@ -12,14 +12,14 @@
 #include "handbrake/decomb.h"
 #include "handbrake/hbavfilter.h"
 #include "handbrake/dovi_common.h"
+#include "handbrake/hwaccel.h"
 
 #if HB_PROJECT_FEATURE_QSV
 #include "handbrake/qsv_common.h"
-#include "handbrake/qsv_filter_pp.h"
 #endif
 
-#if HB_PROJECT_FEATURE_NVENC
-#include "handbrake/nvenc_common.h"
+#ifdef __APPLE__
+#include "platform/macosx/vt_common.h"
 #endif
 
 typedef struct
@@ -464,13 +464,12 @@ void hb_display_job_info(hb_job_t *job)
                hb_qsv_decode_get_codec_name(title->video_codec_param), hb_get_bit_depth(job->input_pix_fmt), av_get_pix_fmt_name(job->input_pix_fmt));
     } else
 #endif
-#if HB_PROJECT_FEATURE_NVENC
-    if (hb_nvdec_is_enabled(job))
+    if (hb_hwaccel_decode_is_enabled(job))
     {
-        hb_log("   + decoder: %s %d-bit (%s)",
-               hb_nvdec_get_codec_name(title->video_codec_param), hb_get_bit_depth(job->input_pix_fmt), av_get_pix_fmt_name(job->input_pix_fmt));
-    } else
-#endif
+        hb_log("   + decoder: %s %d-bit (%s, %s)",
+               hb_hwaccel_get_codec_name(title->video_codec_param), hb_get_bit_depth(job->input_pix_fmt), av_get_pix_fmt_name(job->input_pix_fmt), av_get_pix_fmt_name(job->hw_pix_fmt));
+    }
+    else
     {
         hb_log("   + decoder: %s %d-bit (%s)", title->video_codec_name, hb_get_bit_depth(job->input_pix_fmt), av_get_pix_fmt_name(job->input_pix_fmt));
     }
@@ -1141,6 +1140,38 @@ static int sanitize_audio(hb_job_t *job)
             free(audio);
             continue;
         }
+        /*
+         * never properly tested w/resampling
+         * causes HandBrake GitHub issue #3533
+         */
+        if (audio->config.out.mixdown == HB_AMIXDOWN_RIGHT ||
+            audio->config.out.mixdown == HB_AMIXDOWN_LEFT)
+        {
+            if (audio->config.in.samplerate !=
+                hb_audio_samplerate_find_closest(audio->config.in.samplerate,
+                                                 audio->config.out.codec))
+            {
+                // e.g. >48 kHz input, encoder w/out >48 kHz support (currently all encoders, libhb limitation)
+                hb_log("work: unsupported samplerate %d for mixdown %s, dropping track %d",
+                       audio->config.in.samplerate,
+                       hb_mixdown_get_name(audio->config.out.mixdown),
+                       audio->config.out.track);
+                hb_list_rem(job->list_audio, audio);
+                free(audio);
+                continue;
+            }
+            if (audio->config.out.samplerate > 0 &&
+                audio->config.out.samplerate != audio->config.in.samplerate)
+            {
+                // only log if specific samplerate was requested (i.e. not automatic)
+                hb_log("work: sanitizing track %d samplerate %d to %d for mixdown %s",
+                       audio->config.out.track,
+                       audio->config.out.samplerate,
+                       audio->config.in.samplerate,
+                       hb_mixdown_get_name(audio->config.out.mixdown));
+            }
+            audio->config.out.samplerate = audio->config.in.samplerate; // no resampling
+        }
         /* Adjust output track number, in case we removed one.
          * Output tracks sadly still need to be in sequential order.
          * Note: out.track starts at 1, i starts at 0 */
@@ -1332,7 +1363,7 @@ static int sanitize_audio(hb_job_t *job)
     return 0;
 }
 
-static void sanitize_filter_list(hb_job_t *job, hb_geometry_t src_geo)
+static void sanitize_filter_list_pre(hb_job_t *job, hb_geometry_t src_geo)
 {
     hb_list_t *list = job->list_filter;
 
@@ -1355,27 +1386,7 @@ static void sanitize_filter_list(hb_job_t *job, hb_geometry_t src_geo)
         }
     }
 
-    int is_detel = 0;
-    hb_filter_object_t * filter = hb_filter_find(list, HB_FILTER_DETELECINE);
-    if (filter != NULL)
-    {
-        is_detel = 1;
-    }
-
-    filter = hb_filter_find(list, HB_FILTER_VFR);
-    if (filter != NULL)
-    {
-        int mode = hb_dict_get_int(filter->settings, "mode");
-        // "Same as source" FPS and no HB_FILTER_DETELECINE
-        if ( (mode == 0) && (is_detel == 0) )
-        {
-            hb_list_rem(list, filter);
-            hb_filter_close(&filter);
-            hb_log("Skipping vfr filter");
-        }
-    }
-
-    filter = hb_filter_find(list, HB_FILTER_CROP_SCALE);
+    hb_filter_object_t *filter = hb_filter_find(list, HB_FILTER_CROP_SCALE);
     if (filter != NULL)
     {
         hb_dict_t* settings = filter->settings;
@@ -1394,7 +1405,7 @@ static void sanitize_filter_list(hb_job_t *job, hb_geometry_t src_geo)
             {
                 hb_list_rem(list, filter);
                 hb_filter_close(&filter);
-                hb_log("Skipping crop/scale filter");
+                hb_log("work: skipping crop/scale filter");
             }
         }
     }
@@ -1407,8 +1418,19 @@ static void sanitize_filter_list(hb_job_t *job, hb_geometry_t src_geo)
             hb_qsv_sanitize_filter_list(job);
         }
 #endif
+}
 
-    if (hb_video_encoder_pix_fmt_is_supported(job->vcodec, job->input_pix_fmt, job->encoder_profile) == 0)
+static void sanitize_filter_list_post(hb_job_t *job)
+{
+#ifdef __APPLE__
+    if (job->hw_pix_fmt == AV_PIX_FMT_VIDEOTOOLBOX)
+    {
+        hb_vt_setup_hw_filters(job);
+    }
+#endif
+
+    if (job->hw_pix_fmt == AV_PIX_FMT_NONE &&
+        hb_video_encoder_pix_fmt_is_supported(job->vcodec, job->input_pix_fmt, job->encoder_profile) == 0)
     {
         // Some encoders require a specific input pixel format
         // that could be different from the current pipeline format.
@@ -1431,19 +1453,10 @@ static void sanitize_filter_list(hb_job_t *job, hb_geometry_t src_geo)
             encoder_pix_fmts++;
         }
 
-#if HB_PROJECT_FEATURE_QSV && (defined( _WIN32 ) || defined( __MINGW32__ ))
-        if (hb_qsv_full_path_is_enabled(job))
-        {
-            job->input_pix_fmt = encoder_pix_fmt;
-        }
-        else
-#endif
-        {
-            hb_filter_object_t *filter = hb_filter_init(HB_FILTER_FORMAT);
-            char *settings = hb_strdup_printf("format=%s", av_get_pix_fmt_name(encoder_pix_fmt));
-            hb_add_filter(job, filter, settings);
-            free(settings);
-        }
+        hb_filter_object_t *filter = hb_filter_init(HB_FILTER_FORMAT);
+        char *settings = hb_strdup_printf("format=%s", av_get_pix_fmt_name(encoder_pix_fmt));
+        hb_add_filter(job, filter, settings);
+        free(settings);
     }
 }
 
@@ -1480,7 +1493,6 @@ static void sanitize_dynamic_hdr_metadata_passthru(hb_job_t *job)
     }
 
     if (job->vcodec != HB_VCODEC_X265_10BIT &&
-        job->vcodec != HB_VCODEC_VT_H265_10BIT &&
         job->vcodec != HB_VCODEC_SVT_AV1_10BIT)
     {
         job->passthru_dynamic_hdr_metadata &= ~HDR_10_PLUS;
@@ -1630,18 +1642,27 @@ static void do_job(hb_job_t *job)
     {
         hb_filter_init_t init;
 
-        // Select the optimal pixel format
-        // for the pipeline
+        sanitize_filter_list_pre(job, title->geometry);
+
+        // Select the optimal pixel formats for the pipeline
+        job->hw_pix_fmt = hb_get_best_hw_pix_fmt(job);
         job->input_pix_fmt = hb_get_best_pix_fmt(job);
 
-        sanitize_filter_list(job, title->geometry);
+        // Init hwaccel context if needed
+        if (hb_hwaccel_decode_is_enabled(job))
+        {
+            hb_hwaccel_hw_ctx_init(job);
+        }
+
         sanitize_dynamic_hdr_metadata_passthru(job);
+        sanitize_filter_list_post(job);
 
         memset(&init, 0, sizeof(init));
         init.time_base.num = 1;
         init.time_base.den = 90000;
         init.job = job;
         init.pix_fmt = job->input_pix_fmt;
+        init.hw_pix_fmt = job->hw_pix_fmt;
 
         init.color_prim = title->color_prim;
         init.color_transfer = title->color_transfer;
@@ -2073,7 +2094,10 @@ cleanup:
     {
         analyze_subtitle_scan(job);
     }
+
     hb_buffer_pool_free();
+    hb_hwaccel_hw_ctx_close(job);
+
 #if HB_PROJECT_FEATURE_QSV
     if (!job->indepth_scan &&
         (job->pass_id != HB_PASS_ENCODE_ANALYSIS) &&
@@ -2220,26 +2244,8 @@ static void filter_loop( void * _f )
 
         buf_out = NULL;
 
-#if HB_PROJECT_FEATURE_QSV
-        hb_buffer_t *last_buf_in = buf_in;
-#endif
-
         f->status = f->work( f, &buf_in, &buf_out );
 
-#if HB_PROJECT_FEATURE_QSV
-        if (f->status == HB_FILTER_DELAY &&
-            last_buf_in->qsv_details.filter_details != NULL && buf_out == NULL)
-        {
-            hb_filter_private_t_qsv *qsv_user = buf_in ? buf_in->qsv_details.filter_details : last_buf_in->qsv_details.filter_details ;
-            qsv_user->post.status = f->status;
-
-            hb_lock(qsv_user->post.frame_completed_lock);
-            qsv_user->post.frame_go = 1;
-            hb_cond_broadcast(qsv_user->post.frame_completed);
-            hb_unlock(qsv_user->post.frame_completed_lock);
-
-        }
-#endif
         if ( buf_out && f->chapter_val && f->chapter_time <= buf_out->s.start )
         {
             buf_out->s.new_chap = f->chapter_val;

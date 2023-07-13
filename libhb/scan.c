@@ -31,6 +31,9 @@ typedef struct
     
     int            crop_threshold_frames;
     int            crop_threshold_pixels;
+    
+    hb_list_t    * exclude_extensions;
+    
 } hb_scan_t;
 
 #define PREVIEW_READ_THRESH (200)
@@ -46,6 +49,7 @@ static void UpdateState3(hb_scan_t *scan, int preview);
 static int get_color_prim(int color_primaries, hb_geometry_t geometry, hb_rational_t rate);
 static int get_color_transfer(int color_trc);
 static int get_color_matrix(int colorspace, hb_geometry_t geometry);
+static int get_color_range(int color_range);
 
 static const char *aspect_to_string(hb_rational_t *dar)
 {
@@ -184,12 +188,24 @@ static int get_color_matrix(int colorspace, hb_geometry_t geometry)
     }
 }
 
+static int get_color_range(int color_range)
+{
+    switch (color_range)
+    {
+        case AVCOL_RANGE_MPEG:
+            return AVCOL_RANGE_MPEG;
+        case AVCOL_RANGE_JPEG:
+            return AVCOL_RANGE_JPEG;
+        default:
+            return AVCOL_RANGE_MPEG;
+    }
+}
 
 hb_thread_t * hb_scan_init( hb_handle_t * handle, volatile int * die,
                             const char * path, int title_index,
                             hb_title_set_t * title_set, int preview_count,
                             int store_previews, uint64_t min_duration,
-                            int crop_threshold_frames, int crop_threshold_pixels)
+                            int crop_threshold_frames, int crop_threshold_pixels, hb_list_t * exclude_extensions)
 {
     hb_scan_t * data = calloc( sizeof( hb_scan_t ), 1 );
 
@@ -205,6 +221,7 @@ hb_thread_t * hb_scan_init( hb_handle_t * handle, volatile int * die,
     
     data->crop_threshold_frames = crop_threshold_frames;
     data->crop_threshold_pixels = crop_threshold_pixels;
+    data->exclude_extensions    = hb_string_list_copy(exclude_extensions);
     
     // Initialize scan state
     hb_state_t state;
@@ -284,7 +301,7 @@ static void ScanFunc( void * _data )
                                            data->title_set->list_title );
         }
     }
-    else if ( ( data->batch = hb_batch_init( data->h, data->path ) ) )
+    else if ( ( data->batch = hb_batch_init( data->h, data->path, data->exclude_extensions ) ) )
     {
         if( data->title_index )
         {
@@ -455,6 +472,15 @@ finish:
         hb_batch_close( &data->batch );
     }
     free( data->path );
+    
+    // clean up excluded extensions list
+    char *extension;
+    while ((extension = hb_list_item(data->exclude_extensions, 0)))
+    {
+        hb_list_rem(data->exclude_extensions, extension);
+        free(extension);
+    }
+
     free( data );
     _data = NULL;
     hb_buffer_pool_free();
@@ -1154,11 +1180,32 @@ skip_preview:
                 title->geometry.par.num != vid_info.geometry.par.num &&
                 title->geometry.par.den != vid_info.geometry.par.den)
             {
-                hb_log("WARNING: Video PAR %d:%d != container PAR %d:%d",
-                    vid_info.geometry.par.num, vid_info.geometry.par.den,
-                    title->geometry.par.num, title->geometry.par.den);
+                hb_log("WARNING: bitstream PAR %d:%d != container PAR %d:%d",
+                       vid_info.geometry.par.num, vid_info.geometry.par.den,
+                       title->geometry.par.num, title->geometry.par.den);
             }
-            title->geometry.par = vid_info.geometry.par;
+            /*
+             * Don't override container-level non-square
+             * pixels with bitstream-level square pixels.
+             *
+             * Allows fixing absent bitstream PAR at the container level.
+             *
+             * Still prefer bitstream-level PAR when set, as e.g. mkvmerge will sadly round
+             * it when muxing from elementary streams, making the bitstream PAR more precise:
+             * 720x480 [SAR 32:27 DAR 16:9], SAR 853:720 DAR 853:480, 24 fps, 24 tbr, 1k tbn (default)
+             */
+            if (vid_info.geometry.par.num != 1 ||
+                vid_info.geometry.par.den != 1 ||
+                !title->geometry.par.num ||
+                !title->geometry.par.den)
+            {
+                hb_log("using bitstream PAR %d:%d", vid_info.geometry.par.num, vid_info.geometry.par.den);
+                title->geometry.par = vid_info.geometry.par;
+            }
+            else
+            {
+                hb_log("using container PAR %d:%d", title->geometry.par.num, title->geometry.par.den);
+            }
         }
         else if (!title->geometry.par.num || !title->geometry.par.den)
         {
@@ -1187,7 +1234,7 @@ skip_preview:
             title->color_matrix   = get_color_matrix(vid_info.color_matrix, vid_info.geometry);
         }
 
-        title->color_range = vid_info.color_range;
+        title->color_range = get_color_range(vid_info.color_range);
         title->chroma_location = vid_info.chroma_location;
 
         title->video_decode_support = vid_info.video_decode_support;
@@ -1358,9 +1405,9 @@ skip_preview:
         if (title->video_decode_support != HB_DECODE_SUPPORT_SW)
         {
             hb_log("scan: supported video decoders:%s%s%s",
-                   !(title->video_decode_support & HB_DECODE_SUPPORT_SW)    ? "" : " avcodec",
-                   !(title->video_decode_support & HB_DECODE_SUPPORT_QSV)   ? "" : " qsv",
-                   !(title->video_decode_support & HB_DECODE_SUPPORT_NVDEC) ? "" : " nvdec");
+                   !(title->video_decode_support & HB_DECODE_SUPPORT_SW)      ? "" : " avcodec",
+                   !(title->video_decode_support & HB_DECODE_SUPPORT_QSV)     ? "" : " qsv",
+                   !(title->video_decode_support & HB_DECODE_SUPPORT_HWACCEL) ? "" : " hwaccel");
         }
 
         if( interlaced_preview_count >= ( npreviews / 2 ) )

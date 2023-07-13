@@ -24,14 +24,20 @@ Windows users, please make sure to install [Microsoft .NET Desktop Runtime versi
     - 8.4
   - HDR10+ is supported on both x265 10bit and SVT-AV1 encoders
 - Support for SVT-AV1 multi-pass ABR mode
+- Added NVENC AV1 encoder
 
 #### Third-party libraries
 
 - Updated libraries
   - AMF 1.4.29 (AMD VCN encoding)
   - FFmpeg 6.0 (decoding and filters)
+  - libass 0.17.1 (subtitles)
   - libdav1d 1.1.0 (AV1 decoding)
+  - libopus 1.4 (Opus audio encoding)
   - libvpx 1.13.0 (VP8/VP9 video encoding)
+  - libxml 2.10.4 (general)
+  - SVT-AV1 1.5 (AV1 encoding)
+  - x265 r12776 (H.265/HEVC video encoding)
 
 - New libraries
   - libdovi (Dolby Vision metadata)
@@ -58,24 +64,49 @@ Windows users, please make sure to install [Microsoft .NET Desktop Runtime versi
 
 #### Video
 
-- Fix an issue with QSV that could result in the output video being a green screen. (#4842)
-- Fix a green video issue qith QuickSync (#4876)
+- Fixed an issue when scaling video content that is not mod2.
+- Fixed an issue with QSV that could result in the output video being a green screen (#4842)
+- Fixed a green video issue with QuickSync (#4876)
+- Fixed a pixel format conversion issue that could result is slightly different colors when using a 10-bit hardware encoder (#5011)
 - Various fixes and library updates for QuickSync to improve support on Linux (#4958)
 - Switch to using swscale instead of zscale when the resolution isn't mod2. Should fix scan failures in this condition
+- Fixed PAR when reading from a AV1 anamorphic video track
+- Changed NVEnc option to not default to using multipass. This is now a user configurable advanced option. 
 
-### Linux
+#### Command line interface
 
-- Fixed multiple QSV device enumeration issue and enable Intel QSV AV1 (hardware) video encoders using Flatpak Intel Media plugin (#4775)
-- Fixed default usage of QSV lowpower mode causing issues if HuC is disabled (#4768)
+- Fixed an issue with cropping when using presets / crop arguments (#5055)
+
+#### Audio
+
+- Fixed ac3/eac3 dowmix, volume was too low.
+- Fixed availability of left / right mono mixdowns. 
+- Backported an ffmpeg fix for OPUS LBRR
+
+#### Subtitles
+
+- Fixed a locale issue that could result in the wrong decimal separator in SSA headers.
+- Fixed an issue that caused issues with 0 length subtitles when using SSA. 
+
+### Mac
+
+- Fixed Chroma Smooth tune options.
+- Fixed an issue with the Deblock Filter custom string field. 
+- Fixed the file size display on the queue statistics window when file size info is not available 
+- Miscellaneous other fixes.
 
 ### Windows
 
-- Fixed an issue with autonaming when using drive based sources (#4859)
+- Fixed an issue with automatic file naming when using drive-based sources (#4859)
 - Fixed Title Specific Scan for drive sources. (#4921)
-- Fix an issue that could cause a preset to show as "modified" when it was not. (#4909, #4908)
-- Fixed an issue with QSV bitrate does not respond to changes of ICQ (#4814)
+- Fixed an issue that could cause a preset to show as "modified" when it was not. (#4909, #4908)
+- Fixed an issue where changes to queue order could be lost. (#4922)
+- Fixed an issue on the audio tab where audio tracks could be duplicated when using non fallback encoder. (#5012)
+- Fixed an issue where some hardware presets are incorrectly shown as disabled when swapping graphics cards.
+- Fixed an issue where windows notifications could cause the app to crash on startup where issues exist on the system. (#5097)
 - Some reliability improvements in the Process Isolation Feature. 
-- Miscellaneous other fixes
+- Miscellaneous other fixes. (#5090, #5091)
+
 
 ## HandBrake 1.6.1
 
