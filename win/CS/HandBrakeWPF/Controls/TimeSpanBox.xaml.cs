@@ -658,24 +658,25 @@ namespace HandBrakeWPF.Controls
             TimeSpan newTimespanNumber;
             if (int.TryParse(this.numberBox.Text, out newNumber))
             {
-                // ADDED START
-                string text = this.numberBox.Text;
-                bool parsed = false;
+                if (this.ShowTimeSpan)
+                {
+                    string text = this.numberBox.Text;
+                    bool parsed = false;
 
-                if (text.Length < 5)
-                {
-                    parsed = TimeSpan.TryParseExact(text, "mmss", CultureInfo.InvariantCulture, out newTimespanNumber);
-                }
-                else
-                {
-                    parsed = TimeSpan.TryParseExact(text, "hhmmss", CultureInfo.InvariantCulture, out newTimespanNumber);
-                }
+                    if (text.Length < 5)
+                    {
+                        parsed = TimeSpan.TryParseExact(text, "mmss", CultureInfo.InvariantCulture, out newTimespanNumber);
+                    }
+                    else
+                    {
+                        parsed = TimeSpan.TryParseExact(text, "hhmmss", CultureInfo.InvariantCulture, out newTimespanNumber);
+                    }
 
-                if (parsed)
-                {
-                    newNumber = (int)Math.Round(newTimespanNumber.TotalSeconds, 0);
+                    if (parsed)
+                    {
+                        newNumber = (int)Math.Round(newTimespanNumber.TotalSeconds, 0);
+                    }
                 }
-                // ADDED END
 
                 if (this.NumberIsValid(newNumber))
                 {
