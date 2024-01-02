@@ -21,6 +21,7 @@ namespace HandBrakeWPF.ViewModels
     using HandBrakeWPF.EventArgs;
     using HandBrakeWPF.Model;
     using HandBrakeWPF.Properties;
+    using HandBrakeWPF.Services.Encode.Model.Models;
     using HandBrakeWPF.Services.Interfaces;
     using HandBrakeWPF.Services.Presets.Model;
     using HandBrakeWPF.Services.Scan.Model;
@@ -55,6 +56,7 @@ namespace HandBrakeWPF.ViewModels
         private bool displayLevelControl;
         private bool displayProfileControl;
         private Dictionary<string, string> encoderOptions = new Dictionary<string, string>();
+        private Title currTitle;
 
         public VideoViewModel(IUserSettingService userSettingService, IErrorService errorService)
         {
@@ -237,7 +239,31 @@ namespace HandBrakeWPF.ViewModels
                 this.Task.VideoBitrate = value;
                 this.NotifyOfPropertyChange(() => this.VideoBitrate);
                 this.OnTabStatusChanged(new TabStatusEventArgs("filters", ChangedOption.Bitrate));
+                
+                this.NotifyOfPropertyChange(() => this.EstSizeLabel);
             }
+        }
+
+        public string EstSizeLabel
+        {
+            get
+            {
+                int audioBitrate = 0;
+                if (this.Task.AudioTracks.Count > 0)
+                {
+                    audioBitrate = this.Task.AudioTracks.Single().Bitrate;
+                }
+
+                double startEndDuration = this.Task.EndPoint - this.Task.StartPoint;
+                if (this.Task.PointToPointMode == PointToPointMode.Frames)
+                {
+                    double fps = this.Task.Framerate == null ? this.currTitle.Fps : this.Task.Framerate.Value;
+                    startEndDuration = startEndDuration / fps;
+                }
+
+                double estSize = (((audioBitrate + this.Task.VideoBitrate.Value) / 8) * startEndDuration) / 1024;
+                return "Approx " + Math.Round(estSize, 3) + "MB";
+            } 
         }
 
         public double DisplayRF
@@ -583,6 +609,7 @@ namespace HandBrakeWPF.ViewModels
 
         public void SetSource(Source source, Title title, Preset preset, EncodeTask task)
         {
+            this.currTitle = title;
             this.Task = task;
         }
 

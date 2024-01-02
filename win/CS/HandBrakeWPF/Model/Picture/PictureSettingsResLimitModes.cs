@@ -31,6 +31,10 @@ namespace HandBrakeWPF.Model.Picture
         [ResLimit(1280, 720)]
         Size720p,
 
+        [DisplayName("540p (half 1080)")]
+        [ResLimit(960, 540)]
+        Size540p,
+
         [DisplayName(typeof(Resources), "PictureSettingsResLimitModes_576p")]
         [ResLimit(720, 576)]
         Size576p,

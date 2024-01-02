@@ -113,6 +113,10 @@
                               ToolTip="{x:Static Properties:ResourcesTooltips.Video_TurboAnalysisPass}" />
                 </StackPanel>
 
+                <StackPanel Orientation="Horizontal" Margin="30,0,0,0">
+                    <TextBlock Text="{Binding EstSizeLabel}" />
+                </StackPanel>
+
             </StackPanel>
 
             <!-- H264 settings -->
