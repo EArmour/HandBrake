@@ -1,6 +1,6 @@
 /* vt_common.c
 
-   Copyright (c) 2003-2022 HandBrake Team
+   Copyright (c) 2003-2023 HandBrake Team
    This file is part of the HandBrake source code
    Homepage: <http://handbrake.fr/>.
    It may be used under the terms of the GNU General Public License v2.
@@ -8,6 +8,7 @@
  */
 
 #include "vt_common.h"
+#include "cv_utils.h"
 #include "handbrake/hbffmpeg.h"
 
 #include <VideoToolbox/VideoToolbox.h>
@@ -233,12 +234,12 @@ static const char * const vt_h265_level_names[] =
 
 static const enum AVPixelFormat vt_h26x_pix_fmts[] =
 {
-    AV_PIX_FMT_VIDEOTOOLBOX, AV_PIX_FMT_YUV420P, AV_PIX_FMT_NV12, AV_PIX_FMT_NONE
+    AV_PIX_FMT_P410, AV_PIX_FMT_NV24, AV_PIX_FMT_P210, AV_PIX_FMT_NV16, AV_PIX_FMT_P010, AV_PIX_FMT_YUV420P, AV_PIX_FMT_NV12, AV_PIX_FMT_NONE
 };
 
 static const enum AVPixelFormat vt_h265_10bit_pix_fmts[] =
 {
-    AV_PIX_FMT_P210, AV_PIX_FMT_P010LE, AV_PIX_FMT_NONE
+    AV_PIX_FMT_P410, AV_PIX_FMT_NV24, AV_PIX_FMT_P210, AV_PIX_FMT_NV16, AV_PIX_FMT_P010, AV_PIX_FMT_NV12, AV_PIX_FMT_NONE
 };
 
 const int* hb_vt_get_pix_fmts(int encoder)
@@ -295,62 +296,99 @@ const char* const* hb_vt_level_get_names(int encoder)
     return NULL;
 }
 
-unsigned int hb_vt_get_cv_pixel_format(int pix_fmt, int color_range)
+hb_buffer_t * hb_vt_copy_video_buffer_to_hw_video_buffer(const hb_job_t *job, hb_buffer_t **in)
 {
-    if (pix_fmt == AV_PIX_FMT_NV12)
+    hb_buffer_t *buf = *in;
+
+    OSType cv_pix_fmt = hb_cv_get_pixel_format(buf->f.fmt, buf->f.color_range);
+    CFNumberRef pix_fmt_num = CFNumberCreate(kCFAllocatorDefault, kCFNumberSInt32Type, &cv_pix_fmt);
+    CFNumberRef width_num   = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &buf->f.width);
+    CFNumberRef height_num  = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &buf->f.height);
+
+    const void *attrs_keys[4] =
     {
-        return color_range == AVCOL_RANGE_JPEG ?
-                                kCVPixelFormatType_420YpCbCr8BiPlanarFullRange :
-                                kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange;
-    }
-    else if (pix_fmt == AV_PIX_FMT_YUV420P)
+        kCVPixelBufferWidthKey, kCVPixelBufferHeightKey,
+        kCVPixelBufferPixelFormatTypeKey, kCVPixelBufferMetalCompatibilityKey
+    };
+    const void *attrs_values[4] =
     {
-        return color_range == AVCOL_RANGE_JPEG ?
-                                kCVPixelFormatType_420YpCbCr8PlanarFullRange :
-                                kCVPixelFormatType_420YpCbCr8Planar;
-    }
-    else if (pix_fmt == AV_PIX_FMT_BGRA)
+        width_num, height_num, pix_fmt_num, kCFBooleanTrue
+    };
+
+    CFDictionaryRef attrs = CFDictionaryCreate(kCFAllocatorDefault,
+                                               attrs_keys, attrs_values, 4,
+                                               &kCFTypeDictionaryKeyCallBacks,
+                                               &kCFTypeDictionaryValueCallBacks);
+
+    CFRelease(width_num);
+    CFRelease(height_num);
+    CFRelease(pix_fmt_num);
+
+    CVPixelBufferRef pix_buf = NULL;
+    CVReturn ret = CVPixelBufferCreate(kCFAllocatorDefault,
+                                       buf->f.width, buf->f.height,
+                                       cv_pix_fmt, attrs,
+                                       &pix_buf);
+    CFRelease(attrs);
+
+    if (ret != kCVReturnSuccess)
     {
-        return kCVPixelFormatType_32BGRA;
+        hb_buffer_close(&buf);
+        return NULL;
     }
-    else if (pix_fmt == AV_PIX_FMT_P010LE)
+
+    CVPixelBufferLockBaseAddress(pix_buf, 0);
+
+    for (int pp = 0; pp <= buf->f.max_plane; pp++)
     {
-        return color_range == AVCOL_RANGE_JPEG ?
-                                kCVPixelFormatType_420YpCbCr10BiPlanarFullRange :
-                                kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange;
+        void *dst         = CVPixelBufferGetBaseAddressOfPlane(pix_buf, pp);
+        size_t dst_stride = CVPixelBufferGetBytesPerRowOfPlane(pix_buf, pp);
+
+        void *src         = buf->plane[pp].data;
+        size_t src_height = buf->plane[pp].height;
+        size_t src_stride = buf->plane[pp].stride;
+
+        size_t stride = MIN(dst_stride, src_stride);
+
+        for (int y = 0; y < src_height; y++)
+        {
+            memcpy(dst, src, stride);
+            src += src_stride;
+            dst += dst_stride;
+        }
     }
-    else if (pix_fmt == AV_PIX_FMT_NV16)
+
+    CVPixelBufferUnlockBaseAddress(pix_buf, 0);
+
+    hb_buffer_t *out  = hb_buffer_wrapper_init();
+    out->storage_type = COREMEDIA;
+    out->storage      = pix_buf;
+    out->f            = buf->f;
+    hb_buffer_copy_props(out, buf);
+
+    hb_buffer_close(&buf);
+
+    return out;
+}
+
+hb_buffer_t * hb_vt_buffer_dup(const hb_buffer_t *src)
+{
+    CVPixelBufferRef pix_buf = hb_cv_get_pixel_buffer(src);
+
+    if (pix_buf == NULL)
     {
-        return color_range == AVCOL_RANGE_JPEG ?
-                                kCVPixelFormatType_422YpCbCr8BiPlanarFullRange :
-                                kCVPixelFormatType_422YpCbCr8BiPlanarVideoRange;
+        return NULL;
     }
-    else if (pix_fmt == AV_PIX_FMT_P210)
-    {
-        return color_range == AVCOL_RANGE_JPEG ?
-                                kCVPixelFormatType_422YpCbCr10BiPlanarFullRange :
-                                kCVPixelFormatType_422YpCbCr10BiPlanarVideoRange;
-    }
-    else if (pix_fmt == AV_PIX_FMT_NV24)
-    {
-        return color_range == AVCOL_RANGE_JPEG ?
-                                kCVPixelFormatType_444YpCbCr8BiPlanarFullRange :
-                                kCVPixelFormatType_444YpCbCr8BiPlanarVideoRange;
-    }
-    else if (pix_fmt == AV_PIX_FMT_P410)
-    {
-        return color_range == AVCOL_RANGE_JPEG ?
-                                kCVPixelFormatType_444YpCbCr10BiPlanarFullRange :
-                                kCVPixelFormatType_444YpCbCr10BiPlanarVideoRange;
-    }
-    else if (pix_fmt == AV_PIX_FMT_P416)
-    {
-        return kCVPixelFormatType_444YpCbCr16BiPlanarVideoRange;
-    }
-    else
-    {
-        return 0;
-    }
+
+    CFRetain(pix_buf);
+
+    hb_buffer_t *out  = hb_buffer_wrapper_init();
+    out->storage_type = COREMEDIA;
+    out->storage      = pix_buf;
+    out->f            = src->f;
+    hb_buffer_copy_props(out, src);
+
+    return out;
 }
 
 int hb_vt_are_filters_supported(hb_list_t *filters)
@@ -364,32 +402,22 @@ int hb_vt_are_filters_supported(hb_list_t *filters)
 
         switch (filter->id)
         {
-            case HB_FILTER_CROP_SCALE:
-            case HB_FILTER_CROP_SCALE_VT:
-                break;
-            case HB_FILTER_ROTATE:
-            case HB_FILTER_ROTATE_VT:
-            {
-#ifdef MAC_OS_VERSION_13_0
-                if (__builtin_available(macOS 13, *)) {}
-                else { supported = 0; }
-                break;
-#else
+            case HB_FILTER_DECOMB:
+            case HB_FILTER_DEBLOCK:
+            case HB_FILTER_DENOISE:
+            case HB_FILTER_NLMEANS:
+            case HB_FILTER_RENDER_SUB:
+            case HB_FILTER_COLORSPACE:
+            case HB_FILTER_FORMAT:
                 supported = 0;
-                break;
-#endif
-            }
-            case HB_FILTER_VFR:
-                // Mode 0 doesn't require access to the frame data
-                supported = hb_dict_get_int(filter->settings, "mode") == 0;
                 break;
             default:
-                supported = 0;
+                break;
         }
 
         if (supported == 0)
         {
-            hb_deep_log(2, "hwaccel: %s isn't yet supported for hw video frames", filter->name);
+            hb_deep_log(2, "videotoolbox: %s isn't yet supported for hw video frames", filter->name);
             ret = 0;
         }
     }
@@ -397,56 +425,63 @@ int hb_vt_are_filters_supported(hb_list_t *filters)
     return ret;
 }
 
+static void fix_prores_pix_fmt(hb_job_t *job)
+{
+    // TODO: Find a better way
+    // VideoToolbox ProRes decoder uses an higher bitdepth
+    // than FFmpeg software decoder. We get only the pixel format
+    // from the software decoder in decavcodec.c, so set
+    // a better one here
+    if (job->title->video_codec_param == AV_CODEC_ID_PRORES)
+    {
+        switch (job->title->video_codec_profile)
+        {
+            case AV_PROFILE_PRORES_XQ:
+            case AV_PROFILE_PRORES_4444:
+                job->input_pix_fmt = AV_PIX_FMT_P416;
+                break;
+            default:
+                break;
+        }
+    }
+}
+
+static void replace_filter(hb_job_t *job, int prev_filter_id, int new_filter_id)
+{
+    hb_list_t *list = job->list_filter;
+    hb_filter_object_t *filter = hb_filter_find(list, prev_filter_id);
+
+    if (filter != NULL)
+    {
+        hb_dict_t *settings = filter->settings;
+        if (settings != NULL)
+        {
+            hb_list_rem(list, filter);
+            hb_filter_object_t *new_filter = hb_filter_init(new_filter_id);
+            hb_add_filter_dict(job, new_filter, settings);
+            hb_filter_close(&filter);
+        }
+    }
+}
+
 void hb_vt_setup_hw_filters(hb_job_t *job)
 {
     if (job->hw_pix_fmt == AV_PIX_FMT_VIDEOTOOLBOX)
     {
-        hb_list_t *list = job->list_filter;
+        fix_prores_pix_fmt(job);
 
-        hb_filter_object_t *filter = hb_filter_find(list, HB_FILTER_CROP_SCALE);
-        if (filter != NULL)
-        {
-            hb_dict_t *settings = filter->settings;
-            if (settings != NULL)
-            {
-                int width, height, top, bottom, left, right;
-                width = hb_dict_get_int(settings, "width");
-                height = hb_dict_get_int(settings, "height");
-                top = hb_dict_get_int(settings, "crop-top");
-                bottom = hb_dict_get_int(settings, "crop-bottom");
-                left = hb_dict_get_int(settings, "crop-left");
-                right = hb_dict_get_int(settings, "crop-right");
+        hb_filter_object_t *filter = hb_filter_init(HB_FILTER_PRE_VT);
+        hb_add_filter(job, filter, NULL);
 
-                hb_list_rem(list, filter);
-                hb_filter_close(&filter);
-
-                filter = hb_filter_init(HB_FILTER_CROP_SCALE_VT);
-                char *settings = hb_strdup_printf("width=%d:height=%d:crop-top=%d:crop-bottom=%d:crop-left=%d:crop-right=%d",
-                                                  width, height, top, bottom, left, right);
-                hb_add_filter(job, filter, settings);
-                free(settings);
-            }
-        }
-
-        filter = hb_filter_find(list, HB_FILTER_ROTATE);
-        if (filter != NULL)
-        {
-            hb_dict_t *settings = filter->settings;
-            if (settings != NULL)
-            {
-                int angle, hflip;
-                angle = hb_dict_get_int(settings, "angle");
-                hflip = hb_dict_get_int(settings, "hflip");
-
-                hb_list_rem(list, filter);
-                hb_filter_close(&filter);
-
-                filter = hb_filter_init(HB_FILTER_ROTATE_VT);
-                char *settings = hb_strdup_printf("angle=%d:hflip=%d",
-                                                  angle, hflip);
-                hb_add_filter(job, filter, settings);
-                free(settings);
-            }
-        }
+        replace_filter(job, HB_FILTER_COMB_DETECT, HB_FILTER_COMB_DETECT_VT);
+        replace_filter(job, HB_FILTER_YADIF, HB_FILTER_YADIF_VT);
+        replace_filter(job, HB_FILTER_BWDIF, HB_FILTER_BWDIF_VT);
+        replace_filter(job, HB_FILTER_CROP_SCALE, HB_FILTER_CROP_SCALE_VT);
+        replace_filter(job, HB_FILTER_CHROMA_SMOOTH, HB_FILTER_CHROMA_SMOOTH_VT);
+        replace_filter(job, HB_FILTER_ROTATE, HB_FILTER_ROTATE_VT);
+        replace_filter(job, HB_FILTER_PAD, HB_FILTER_PAD_VT);
+        replace_filter(job, HB_FILTER_GRAYSCALE, HB_FILTER_GRAYSCALE_VT);
+        replace_filter(job, HB_FILTER_LAPSHARP, HB_FILTER_LAPSHARP_VT);
+        replace_filter(job, HB_FILTER_UNSHARP, HB_FILTER_UNSHARP_VT);
     }
 }

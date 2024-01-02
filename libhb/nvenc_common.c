@@ -1,6 +1,6 @@
 /* nvenc_common.c
  *
- * Copyright (c) 2003-2022 HandBrake Team
+ * Copyright (c) 2003-2023 HandBrake Team
  * This file is part of the HandBrake source code.
  * Homepage: <http://handbrake.fr/>.
  * It may be used under the terms of the GNU General Public License v2.
@@ -18,6 +18,7 @@
 
 static int is_nvenc_available = -1;
 static int is_nvenc_av1_available = -1;
+static int is_nvenc_h264_available = -1;
 static int is_nvenc_hevc_available = -1;
 
 static double cuda_version = -1;
@@ -138,7 +139,27 @@ int hb_check_nvenc_available()
 
 int hb_nvenc_h264_available()
 {
-    return hb_check_nvenc_available();
+    if (is_nvenc_h264_available != -1)
+    {
+        return is_nvenc_h264_available;
+    }
+
+    if (!hb_check_nvenc_available())
+    {
+        is_nvenc_h264_available = 0;
+        return is_nvenc_h264_available;
+    }
+
+    if (hb_nvenc_get_cuda_version() > 0)
+    {
+        is_nvenc_h264_available = 1;
+    } 
+    else 
+    {
+        is_nvenc_h264_available = 0;
+    }
+
+    return is_nvenc_h264_available;
 }
 
 int hb_nvenc_h265_available()
@@ -223,4 +244,33 @@ const char * hb_map_nvenc_preset_name (const char * preset)
     }
 
     return "p4"; // Default to Medium
+}
+
+int hb_nvenc_are_filters_supported(hb_list_t *filters)
+{
+    int ret = 1;
+
+    for (int i = 0; i < hb_list_count(filters); i++)
+    {
+        int supported = 1;
+        hb_filter_object_t *filter = hb_list_item(filters, i);
+
+        switch (filter->id)
+        {
+            case HB_FILTER_VFR:
+                // Mode 0 doesn't require access to the frame data
+                supported = hb_dict_get_int(filter->settings, "mode") == 0;
+                break;
+            default:
+                supported = 0;
+        }
+
+        if (supported == 0)
+        {
+            hb_deep_log(2, "hwaccel: %s isn't yet supported for hw video frames", filter->name);
+            ret = 0;
+        }
+    }
+
+    return ret;
 }

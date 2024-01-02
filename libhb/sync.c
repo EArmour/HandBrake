@@ -1,6 +1,6 @@
 /* sync.c
 
-   Copyright (c) 2003-2022 HandBrake Team
+   Copyright (c) 2003-2023 HandBrake Team
    This file is part of the HandBrake source code
    Homepage: <http://handbrake.fr/>.
    It may be used under the terms of the GNU General Public License v2.
@@ -390,25 +390,23 @@ static hb_buffer_t * CreateBlackBuf( sync_stream_t * stream,
             buf->f.color_range = stream->common->job->color_range;
             buf->f.chroma_location = stream->common->job->chroma_location;
 #if HB_PROJECT_FEATURE_QSV
-            if (hb_qsv_full_path_is_enabled(stream->common->job) && !hb_qsv_hw_filters_are_enabled(stream->common->job))
+            if (hb_qsv_get_memory_type(stream->common->job) == MFX_IOPATTERN_OUT_VIDEO_MEMORY)
             {
-                hb_qsv_attach_surface_to_video_buffer(stream->common->job, buf, 0);
+                buf = hb_qsv_copy_video_buffer_to_hw_video_buffer(stream->common->job, buf, hb_qsv_hw_filters_via_video_memory_are_enabled(stream->common->job));
             }
+            else
 #endif
             if (hb_hwaccel_is_full_hardware_pipeline_enabled(stream->common->job))
             {
-                hb_buffer_t *temp = buf;
-                buf = hb_hwaccel_copy_video_buffer_to_hw_video_buffer(stream->common->job, temp);
+                buf = hb_hwaccel_copy_video_buffer_to_hw_video_buffer(stream->common->job, &buf);
             }
         }
         else
         {
 #if HB_PROJECT_FEATURE_QSV
-            if (hb_qsv_full_path_is_enabled(stream->common->job) && !hb_qsv_hw_filters_are_enabled(stream->common->job))
+            if (hb_qsv_get_memory_type(stream->common->job) == MFX_IOPATTERN_OUT_VIDEO_MEMORY)
             {
-                hb_buffer_t *temp = hb_buffer_dup(buf);
-                hb_qsv_copy_video_buffer_to_video_buffer(stream->common->job, buf, temp, 0);
-                buf = temp;
+                buf = hb_qsv_buffer_dup(stream->common->job, buf, hb_qsv_hw_filters_via_video_memory_are_enabled(stream->common->job));
             }
             else
 #endif

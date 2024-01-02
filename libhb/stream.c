@@ -1,6 +1,6 @@
 /* stream.c
 
-   Copyright (c) 2003-2022 HandBrake Team
+   Copyright (c) 2003-2023 HandBrake Team
    This file is part of the HandBrake source code
    Homepage: <http://handbrake.fr/>.
    It may be used under the terms of the GNU General Public License v2.
@@ -2032,7 +2032,7 @@ static void pes_add_subtitle_to_title(
     }
 
     lang = lang_for_code( pes->lang_code );
-    snprintf(subtitle->lang, sizeof( subtitle->lang ), "%s [%s]",
+    snprintf(subtitle->lang, sizeof( subtitle->lang ), "%s (%s)",
              strlen(lang->native_name) ? lang->native_name : lang->eng_name,
              hb_subsource_name(subtitle->source));
     snprintf(subtitle->iso639_2, sizeof( subtitle->iso639_2 ), "%s",
@@ -5234,9 +5234,9 @@ static int ffmpeg_open( hb_stream_t *stream, hb_title_t *title, int scan )
     }
     av_dict_free( &av_opts );
 
-    if (title->color_prim     == -1 &&
-        title->color_transfer == -1 &&
-        title->color_matrix   == -1)
+    if (title->color_prim     == HB_COLR_PRI_UNSET &&
+        title->color_transfer == HB_COLR_TRA_UNSET &&
+        title->color_matrix   == HB_COLR_MAT_UNSET)
     {
         // Read the video track color info
         // before it's overwritten with the stream info
@@ -5306,7 +5306,8 @@ static int ffmpeg_open( hb_stream_t *stream, hb_title_t *title, int scan )
     return 1;
 
   fail:
-    if ( info_ic ) avformat_close_input( &info_ic );
+    avformat_close_input(&info_ic);
+    av_packet_free(&stream->ffmpeg_pkt);
     return 0;
 }
 
@@ -5680,7 +5681,7 @@ static void add_ffmpeg_subtitle( hb_title_t *title, hb_stream_t *stream, int id 
             return;
     }
 
-    snprintf(subtitle->lang, sizeof( subtitle->lang ), "%s [%s]",
+    snprintf(subtitle->lang, sizeof( subtitle->lang ), "%s (%s)",
              strlen(lang->native_name) ? lang->native_name : lang->eng_name,
              hb_subsource_name(subtitle->source));
     strncpy(subtitle->iso639_2, lang->iso639_2, 3);
@@ -5811,12 +5812,15 @@ static hb_title_t *ffmpeg_title_scan( hb_stream_t *stream, hb_title_t *title )
     if (dot_term)
         *dot_term = '\0';
 
-    uint64_t dur = ic->duration * 90000 / AV_TIME_BASE;
-    title->duration = dur;
-    dur /= 90000;
-    title->hours    = dur / 3600;
-    title->minutes  = ( dur % 3600 ) / 60;
-    title->seconds  = dur % 60;
+    if (ic->duration > 0)
+    {
+        uint64_t dur = ic->duration * 90000 / AV_TIME_BASE;
+        title->duration = dur;
+        dur /= 90000;
+        title->hours    = dur / 3600;
+        title->minutes  = ( dur % 3600 ) / 60;
+        title->seconds  = dur % 60;
+    }
 
     // set the title to decode the first video stream in the file
     title->demuxer = HB_NULL_DEMUXER;
@@ -5852,9 +5856,9 @@ static hb_title_t *ffmpeg_title_scan( hb_stream_t *stream, hb_title_t *title )
             }
 
             int j;
-            for (j = 0; j < st->nb_side_data; j++)
+            for (j = 0; j < codecpar->nb_coded_side_data; j++)
             {
-                AVPacketSideData sd = st->side_data[j];
+                AVPacketSideData sd = codecpar->coded_side_data[j];
                 switch (sd.type)
                 {
                     case AV_PKT_DATA_DISPLAYMATRIX:

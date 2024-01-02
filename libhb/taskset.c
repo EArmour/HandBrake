@@ -1,6 +1,6 @@
 /* taskset.c
 
-   Copyright (c) 2003-2022 HandBrake Team
+   Copyright (c) 2003-2023 HandBrake Team
    This file is part of the HandBrake source code
    Homepage: <http://handbrake.fr/>.
    It may be used under the terms of the GNU General Public License v2.
@@ -209,6 +209,11 @@ taskset_thread_f( void *thread_args_v )
 void
 taskset_fini( taskset_t *ts )
 {
+    if (ts == NULL)
+    {
+        return;
+    }
+
     int i;
     if ( ts->task_thread_started ) {
         /*

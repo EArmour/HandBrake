@@ -1,12 +1,13 @@
 /* muxavformat.c
 
-   Copyright (c) 2003-2022 HandBrake Team
+   Copyright (c) 2003-2023 HandBrake Team
    This file is part of the HandBrake source code
    Homepage: <http://handbrake.fr/>.
    It may be used under the terms of the GNU General Public License v2.
    For full terms see the file COPYING file or visit http://www.gnu.org/licenses/gpl-2.0.html
  */
 
+#include <time.h>
 #include <ogg/ogg.h>
 #include "libavcodec/bsf.h"
 #include "libavformat/avformat.h"
@@ -185,7 +186,7 @@ static int avformatInit( hb_mux_object_t * m )
 
             av_dict_set(&av_opts, "brand", "mp42", 0);
             av_dict_set(&av_opts, "strict", "experimental", 0);
-            if (job->mp4_optimize)
+            if (job->optimize)
                 av_dict_set(&av_opts, "movflags", "faststart+disable_chpl+write_colr", 0);
             else
                 av_dict_set(&av_opts, "movflags", "+disable_chpl+write_colr", 0);
@@ -387,6 +388,7 @@ static int avformatInit( hb_mux_object_t * m )
         case HB_VCODEC_SVT_AV1_10BIT:
         case HB_VCODEC_FFMPEG_NVENC_AV1:
         case HB_VCODEC_FFMPEG_NVENC_AV1_10BIT:
+        case HB_VCODEC_FFMPEG_VCE_AV1:
             track->st->codecpar->codec_id = AV_CODEC_ID_AV1;
 
             if (job->config.extradata.length > 0)
@@ -438,7 +440,6 @@ static int avformatInit( hb_mux_object_t * m )
                 }
             }
         } break;
-
         case HB_VCODEC_THEORA:
         {
             track->st->codecpar->codec_id = AV_CODEC_ID_THEORA;
@@ -561,10 +562,11 @@ static int avformatInit( hb_mux_object_t * m )
             uint8_t *mastering_data = av_malloc(sizeof(AVMasteringDisplayMetadata));
             memcpy(mastering_data, &mastering, sizeof(AVMasteringDisplayMetadata));
 
-            av_stream_add_side_data(track->st,
+            av_packet_side_data_add(&track->st->codecpar->coded_side_data,
+                                    &track->st->codecpar->nb_coded_side_data,
                                     AV_PKT_DATA_MASTERING_DISPLAY_METADATA,
                                     mastering_data,
-                                    sizeof(AVMasteringDisplayMetadata));
+                                    sizeof(AVMasteringDisplayMetadata), 0);
         }
 
         if (job->coll.max_cll && job->coll.max_fall)
@@ -576,10 +578,11 @@ static int avformatInit( hb_mux_object_t * m )
             uint8_t *coll_data = av_malloc(sizeof(AVContentLightMetadata));
             memcpy(coll_data, &coll, sizeof(AVContentLightMetadata));
 
-            av_stream_add_side_data(track->st,
+            av_packet_side_data_add(&track->st->codecpar->coded_side_data,
+                                    &track->st->codecpar->nb_coded_side_data,
                                     AV_PKT_DATA_CONTENT_LIGHT_LEVEL,
                                     coll_data,
-                                    sizeof(AVContentLightMetadata));
+                                    sizeof(AVContentLightMetadata), 0);
         }
     }
 
@@ -590,10 +593,11 @@ static int avformatInit( hb_mux_object_t * m )
         uint8_t *ambient_data = av_malloc(sizeof(AVAmbientViewingEnvironment));
         memcpy(ambient_data, &ambient, sizeof(AVAmbientViewingEnvironment));
 
-        av_stream_add_side_data(track->st,
+        av_packet_side_data_add(&track->st->codecpar->coded_side_data,
+                                &track->st->codecpar->nb_coded_side_data,
                                 AV_PKT_DATA_AMBIENT_VIEWING_ENVIRONMENT,
                                 ambient_data,
-                                sizeof(AVAmbientViewingEnvironment));
+                                sizeof(AVAmbientViewingEnvironment), 0);
     }
 
     if (job->passthru_dynamic_hdr_metadata & DOVI)
@@ -610,10 +614,11 @@ static int avformatInit( hb_mux_object_t * m )
         uint8_t *dovi_data = av_malloc(sizeof(AVDOVIDecoderConfigurationRecord));
         memcpy(dovi_data, &dovi, sizeof(AVDOVIDecoderConfigurationRecord));
 
-        av_stream_add_side_data(track->st,
+        av_packet_side_data_add(&track->st->codecpar->coded_side_data,
+                                &track->st->codecpar->nb_coded_side_data,
                                 AV_PKT_DATA_DOVI_CONF,
                                 dovi_data,
-                                sizeof(AVDOVIDecoderConfigurationRecord));
+                                sizeof(AVDOVIDecoderConfigurationRecord), 0);
 
         m->oc->strict_std_compliance = FF_COMPLIANCE_UNOFFICIAL;
     }
@@ -920,16 +925,19 @@ static int avformatInit( hb_mux_object_t * m )
                          codec == HB_ACODEC_FDK_HAAC))
                     {
                         hb_mux_data_t * fallback_track;
-                        int           * sd;
+                        AVPacketSideData *sd;
 
                         track = audio->priv.mux_data;
                         fallback_track = fallback->priv.mux_data;
-                        sd = (int*)av_stream_new_side_data(track->st,
+                        sd = av_packet_side_data_new(&track->st->codecpar->coded_side_data,
+                                                     &track->st->codecpar->nb_coded_side_data,
                                                      AV_PKT_DATA_FALLBACK_TRACK,
-                                                     sizeof(int));
+                                                     sizeof(int), 0);
+
                         if (sd != NULL)
                         {
-                            *sd = fallback_track->st->index;
+                            int *data = (int *)sd->data;
+                            *data = fallback_track->st->index;
                         }
                     }
                 }

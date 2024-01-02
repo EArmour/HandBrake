@@ -1,6 +1,6 @@
 /* test.c
 
-   Copyright (c) 2003-2022 HandBrake Team
+   Copyright (c) 2003-2023 HandBrake Team
    This file is part of the HandBrake source code
    Homepage: <http://handbrake.fr/>.
    It may be used under the terms of the GNU General Public License v2.
@@ -192,7 +192,7 @@ static char *   preset_export_file   = NULL;
 static char *   preset_name          = NULL;
 static char *   queue_import_name    = NULL;
 static int      cfr           = -1;
-static int      mp4_optimize  = -1;
+static int      optimize      = -1;
 static int      ipod_atom     = -1;
 static int      color_matrix_code = -1;
 static int      preview_count = 10;
@@ -536,7 +536,11 @@ int main( int argc, char ** argv )
     if (queue_import_name != NULL)
     {
         hb_system_sleep_prevent(h);
-        RunQueue(h, queue_import_name);
+        if (RunQueue(h, queue_import_name))
+        {
+            done_error = HB_ERROR_WRONG_INPUT;
+            goto cleanup;
+        }
     }
     else
     {
@@ -595,7 +599,9 @@ int main( int argc, char ** argv )
         hb_system_sleep_prevent(h);
 
         hb_scan(h, input, titleindex, preview_count, store_previews,
-                min_title_duration * 90000LL, crop_threshold_frames, crop_threshold_pixels, NULL);
+                min_title_duration * 90000LL,
+                crop_threshold_frames, crop_threshold_pixels,
+                NULL, hw_decode);
 
         EventLoop(h, preset_dict);
         hb_value_free(&preset_dict);
@@ -1485,7 +1491,11 @@ static void ShowHelp(void)
 "                           If none of these flags are given, the default\n"
 "                           is --pfr when -r is given and --vfr otherwise\n"
 "   --enable-hw-decoding <string>                                        \n"
+#if defined( __APPLE_CC__ )
+"                           Use 'videotoolbox' to enable VideoToolbox    \n"
+#else
 "                           Use 'nvdec' to enable NVDec                  \n"
+#endif
 "   --disable-hw-decoding   Disable hardware decoding of the video track,\n"
 "                           forcing software decoding instead\n"
 
@@ -2241,7 +2251,7 @@ static int ParseOptions( int argc, char ** argv )
             { "input",       required_argument, NULL,    'i' },
             { "output",      required_argument, NULL,    'o' },
             { "optimize",    no_argument,       NULL,        'O' },
-            { "no-optimize", no_argument,       &mp4_optimize, 0 },
+            { "no-optimize", no_argument,       &optimize, 0 },
             { "ipod-atom",   no_argument,       NULL,        'I' },
             { "no-ipod-atom",no_argument,       &ipod_atom,    0 },
 
@@ -2521,7 +2531,7 @@ static int ParseOptions( int argc, char ** argv )
                 output = strdup( optarg );
                 break;
             case 'O':
-                mp4_optimize = 1;
+                optimize = 1;
                 break;
             case 'I':
                 ipod_atom = 1;
@@ -3190,7 +3200,16 @@ static int ParseOptions( int argc, char ** argv )
                     }
                     else if (!strcmp(optarg, "videotoolbox"))
                     {
-                        hw_decode = HB_DECODE_SUPPORT_VIDEOTOOLBOX;
+#if defined( __APPLE_CC__ )
+                        if (__builtin_available(macOS 13, *))
+                        {
+                            hw_decode = HB_DECODE_SUPPORT_VIDEOTOOLBOX;
+                        }
+                        else
+                        {
+                            fprintf( stderr, "videotoolbox hardware decoders require macOS 13 and later");
+                        }
+#endif
                     }
                     else
                     {
@@ -3700,9 +3719,9 @@ static hb_dict_t * PreparePreset(const char *preset_name)
     {
         hb_dict_set(preset, "FileFormat", hb_value_string(format));
     }
-    if (mp4_optimize != -1)
+    if (optimize != -1)
     {
-        hb_dict_set(preset, "Mp4HttpOptimize", hb_value_bool(mp4_optimize));
+        hb_dict_set(preset, "Optimize", hb_value_bool(optimize));
     }
     if (ipod_atom != -1)
     {

@@ -1,7 +1,7 @@
 /* nlmeans.c
 
    Copyright (c) 2013 Dirk Farin
-   Copyright (c) 2003-2022 HandBrake Team
+   Copyright (c) 2003-2023 HandBrake Team
    This file is part of the HandBrake source code
    Homepage: <http://handbrake.fr/>.
    It may be used under the terms of the GNU General Public License v2.
@@ -223,6 +223,11 @@ static int nlmeans_init(hb_filter_object_t *filter,
                            hb_filter_init_t *init)
 {
     filter->private_data = calloc(sizeof(struct hb_filter_private_s), 1);
+    if (filter->private_data == NULL)
+    {
+        hb_error("nlmeans: calloc failed");
+        return -1;
+    }
     hb_filter_private_t *pv = filter->private_data;
     NLMeansFunctions *functions = &pv->functions;
 
@@ -368,6 +373,11 @@ static int nlmeans_init(hb_filter_object_t *filter,
     hb_log("NLMeans using %i threads", pv->threads);
 
     pv->frame = calloc(pv->threads + pv->max_frames, sizeof(Frame));
+    if (pv->frame == NULL)
+    {
+        hb_error("nlmeans: calloc failed");
+        goto fail;
+    }
     for (int ii = 0; ii < pv->threads + pv->max_frames; ii++)
     {
         for (int c = 0; c < 3; c++)
@@ -432,6 +442,7 @@ static void nlmeans_close(hb_filter_object_t *filter)
                 free(pv->frame[f].plane[c].mem);
                 pv->frame[f].plane[c].mem = NULL;
             }
+            hb_buffer_close(&pv->frame[f].buf);
         }
     }
 

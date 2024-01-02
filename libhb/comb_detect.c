@@ -1,6 +1,6 @@
 /* comb_detect.c
 
-   Copyright (c) 2003-2022 HandBrake Team
+   Copyright (c) 2003-2023 HandBrake Team
    This file is part of the HandBrake source code
    Homepage: <http://handbrake.fr/>.
    It may be used under the terms of the GNU General Public License v2.
@@ -592,6 +592,11 @@ static int comb_detect_init(hb_filter_object_t *filter,
                             hb_filter_init_t   *init)
 {
     filter->private_data = calloc(1, sizeof(struct hb_filter_private_s));
+    if (filter->private_data == NULL)
+    {
+        hb_error("comb_detect: calloc failed");
+        return -1;
+    }
     hb_filter_private_t *pv = filter->private_data;
 
     hb_buffer_list_clear(&pv->out_list);
@@ -603,6 +608,11 @@ static int comb_detect_init(hb_filter_object_t *filter,
     pv->half_value = (1 << pv->depth) / 2;
 
     pv->gamma_lut = malloc(sizeof(float) * (pv->max_value + 1));
+    if (pv->gamma_lut == NULL)
+    {
+        hb_error("comb_detect: malloc failed");
+        return -1;
+    }
     build_gamma_lut(pv);
 
     pv->frames = 0;
@@ -635,6 +645,15 @@ static int comb_detect_init(hb_filter_object_t *filter,
         hb_dict_extract_int(&pv->block_threshold, dict, "block-thresh");
         hb_dict_extract_int(&pv->block_width, dict, "block-width");
         hb_dict_extract_int(&pv->block_height, dict, "block-height");
+    }
+
+    if (pv->block_width > init->geometry.width)
+    {
+        pv->block_width = init->geometry.width;
+    }
+    if (pv->block_height > init->geometry.height)
+    {
+        pv->block_height = init->geometry.height;
     }
 
     // Scale the thresholds for the current depth
@@ -949,6 +968,8 @@ static void comb_detect_close(hb_filter_object_t *filter)
             taskset_fini(&pv->mask_dilate_taskset);
         }
     }
+
+    hb_buffer_list_close(&pv->out_list);
 
     /* Cleanup reference buffers. */
     for (int ii = 0; ii < 3; ii++)

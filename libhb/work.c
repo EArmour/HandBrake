@@ -1,12 +1,13 @@
 /* work.c
 
-   Copyright (c) 2003-2022 HandBrake Team
+   Copyright (c) 2003-2023 HandBrake Team
    This file is part of the HandBrake source code
    Homepage: <http://handbrake.fr/>.
    It may be used under the terms of the GNU General Public License v2.
    For full terms see the file COPYING file or visit http://www.gnu.org/licenses/gpl-2.0.html
  */
 
+#include <time.h>
 #include "handbrake/handbrake.h"
 #include "libavformat/avformat.h"
 #include "handbrake/decomb.h"
@@ -222,7 +223,7 @@ hb_work_object_t* hb_audio_decoder(hb_handle_t *h, int codec)
     return w;
 }
 
-hb_work_object_t* hb_video_decoder(hb_handle_t *h, int vcodec, int param)
+hb_work_object_t* hb_video_decoder(hb_handle_t *h, int vcodec, int param, void *hw_device_ctx)
 {
     hb_work_object_t * w;
 
@@ -233,6 +234,7 @@ hb_work_object_t* hb_video_decoder(hb_handle_t *h, int vcodec, int param)
         return NULL;
     }
     w->codec_param = param;
+    w->hw_device_ctx = hw_device_ctx;
 
     return w;
 }
@@ -291,6 +293,10 @@ hb_work_object_t* hb_video_encoder(hb_handle_t *h, int vcodec)
         case HB_VCODEC_FFMPEG_VCE_H265_10BIT:
             w = hb_get_work(h, WORK_ENCAVCODEC);
             w->codec_param = AV_CODEC_ID_HEVC;
+            break;
+        case HB_VCODEC_FFMPEG_VCE_AV1:
+            w = hb_get_work(h, WORK_ENCAVCODEC);
+            w->codec_param = AV_CODEC_ID_AV1;
             break;
 #endif
 #if HB_PROJECT_FEATURE_NVENC
@@ -432,12 +438,11 @@ void hb_display_job_info(hb_job_t *job)
     switch (job->mux)
     {
         case HB_MUX_AV_MP4:
-            if (job->mp4_optimize)
+            if (job->optimize)
                 hb_log("     + optimized for HTTP streaming (fast start)");
             if (job->ipod_atom)
                 hb_log("     + compatibility atom for iPod 5G");
             break;
-
         default:
             break;
     }
@@ -466,8 +471,8 @@ void hb_display_job_info(hb_job_t *job)
 #endif
     if (hb_hwaccel_decode_is_enabled(job))
     {
-        hb_log("   + decoder: %s %d-bit (%s, %s)",
-               hb_hwaccel_get_codec_name(title->video_codec_param), hb_get_bit_depth(job->input_pix_fmt), av_get_pix_fmt_name(job->input_pix_fmt), av_get_pix_fmt_name(job->hw_pix_fmt));
+        hb_log("   + decoder: %s %d-bit hwaccel (%s, %s)",
+               title->video_codec_name, hb_get_bit_depth(job->input_pix_fmt), av_get_pix_fmt_name(job->input_pix_fmt), av_get_pix_fmt_name(job->hw_pix_fmt));
     }
     else
     {
@@ -578,6 +583,7 @@ void hb_display_job_info(hb_job_t *job)
                 case HB_VCODEC_FFMPEG_VCE_H264:
                 case HB_VCODEC_FFMPEG_VCE_H265:
                 case HB_VCODEC_FFMPEG_VCE_H265_10BIT:
+                case HB_VCODEC_FFMPEG_VCE_AV1:
                 case HB_VCODEC_FFMPEG_NVENC_H264:
                 case HB_VCODEC_FFMPEG_NVENC_H265:
                 case HB_VCODEC_FFMPEG_NVENC_H265_10BIT:
@@ -612,6 +618,7 @@ void hb_display_job_info(hb_job_t *job)
                 case HB_VCODEC_FFMPEG_VCE_H264:
                 case HB_VCODEC_FFMPEG_VCE_H265:
                 case HB_VCODEC_FFMPEG_VCE_H265_10BIT:
+                case HB_VCODEC_FFMPEG_VCE_AV1:
                 case HB_VCODEC_FFMPEG_NVENC_H264:
                 case HB_VCODEC_FFMPEG_NVENC_H265:
                 case HB_VCODEC_FFMPEG_NVENC_H265_10BIT:
@@ -1386,10 +1393,21 @@ static void sanitize_filter_list_pre(hb_job_t *job, hb_geometry_t src_geo)
         }
     }
 
-    hb_filter_object_t *filter = hb_filter_find(list, HB_FILTER_CROP_SCALE);
+    int angle = 0;
+    hb_filter_object_t *filter = hb_filter_find(list, HB_FILTER_ROTATE);
     if (filter != NULL)
     {
-        hb_dict_t* settings = filter->settings;
+        hb_dict_t *settings = filter->settings;
+        if (settings != NULL)
+        {
+            angle = hb_dict_get_int(settings, "angle");
+        }
+    }
+
+    filter = hb_filter_find(list, HB_FILTER_CROP_SCALE);
+    if (filter != NULL)
+    {
+        hb_dict_t *settings = filter->settings;
         if (settings != NULL)
         {
             int width, height, top, bottom, left, right;
@@ -1400,8 +1418,15 @@ static void sanitize_filter_list_pre(hb_job_t *job, hb_geometry_t src_geo)
             left = hb_dict_get_int(settings, "crop-left");
             right = hb_dict_get_int(settings, "crop-right");
 
-            if ( (src_geo.width == width) && (src_geo.height == height) &&
-                (top == 0) && (bottom == 0 ) && (left == 0) && (right == 0) )
+            if (angle == 90 || angle == 270)
+            {
+                int temp = width;
+                width = height;
+                height = temp;
+            }
+
+            if (src_geo.width == width && src_geo.height == height &&
+                top == 0 && bottom == 0 && left == 0 && right == 0)
             {
                 hb_list_rem(list, filter);
                 hb_filter_close(&filter);
@@ -1411,12 +1436,10 @@ static void sanitize_filter_list_pre(hb_job_t *job, hb_geometry_t src_geo)
     }
 
 #if HB_PROJECT_FEATURE_QSV && (defined( _WIN32 ) || defined( __MINGW32__ ))
-        // sanitize_qsv looks for subtitle render filter, so must happen after
-        // sanitize_subtitle
-        if (hb_qsv_is_enabled(job))
-        {
-            hb_qsv_sanitize_filter_list(job);
-        }
+    if (hb_qsv_is_enabled(job))
+    {
+        hb_qsv_sanitize_filter_list(job);
+    }
 #endif
 }
 
@@ -1429,7 +1452,7 @@ static void sanitize_filter_list_post(hb_job_t *job)
     }
 #endif
 
-    if (job->hw_pix_fmt == AV_PIX_FMT_NONE &&
+    if ((job->hw_pix_fmt == AV_PIX_FMT_NONE || job->hw_pix_fmt == AV_PIX_FMT_QSV) &&
         hb_video_encoder_pix_fmt_is_supported(job->vcodec, job->input_pix_fmt, job->encoder_profile) == 0)
     {
         // Some encoders require a specific input pixel format
@@ -1460,13 +1483,13 @@ static void sanitize_filter_list_post(hb_job_t *job)
     }
 }
 
-static int dolby_vision_level(int width, int height, hb_rational_t vrate)
+static int dolby_vision_level(int width, int pps, int bitrate)
 {
-    int pps = (double)width * height * (vrate.num / vrate.den);
-
     for (int i = 0; hb_dolby_vision_levels[i].id != 0; i++)
     {
-        if (pps < hb_dolby_vision_levels[i].max_pps)
+        if (pps <= hb_dolby_vision_levels[i].max_pps &&
+            width <= hb_dolby_vision_levels[i].max_width &&
+            bitrate <= (int)hb_dolby_vision_levels[i].max_bitrate_main_tier * 1024)
         {
             return hb_dolby_vision_levels[i].id;
         }
@@ -1478,7 +1501,14 @@ static int dolby_vision_level(int width, int height, hb_rational_t vrate)
 
 static void update_dolby_vision_level(hb_job_t *job)
 {
-    job->dovi.dv_level = dolby_vision_level(job->width, job->height, job->vrate);
+    // Dolby Vision has got its own definition of "level"
+    // defined in section 2.2 of "Dolby Vision Profiles and Levels"
+    // moreover, x265 requires vbv to be set, so do a rough guess here.
+    // Encoders can override it when needed.
+    int pps = (double)job->width * job->height * (job->vrate.num / job->vrate.den);
+    int bitrate = job->vquality == HB_INVALID_VIDEO_QUALITY ? job->vbitrate : -1;
+
+    job->dovi.dv_level = dolby_vision_level(job->width, pps, bitrate);
 }
 
 static void sanitize_dynamic_hdr_metadata_passthru(hb_job_t *job)
@@ -1627,6 +1657,16 @@ static void do_job(hb_job_t *job)
         hb_log( "Starting Task: Encoding Pass" );
     }
 
+    // Allow the usage of the hardware decoder
+    // only if it was marked as supported in the scan
+    // TODO: remove the ifdef after WinUI is updated
+#ifdef __APPLE__
+    if ((title->video_decode_support & job->hw_decode) == 0)
+    {
+        job->hw_decode = 0;
+    }
+#endif
+
     // This must be performed before initializing filters because
     // it can add the subtitle render filter.
     result = sanitize_subtitles(job);
@@ -1651,7 +1691,9 @@ static void do_job(hb_job_t *job)
         // Init hwaccel context if needed
         if (hb_hwaccel_decode_is_enabled(job))
         {
-            hb_hwaccel_hw_ctx_init(job);
+            hb_hwaccel_hw_ctx_init(job->title->video_codec_param,
+                                   job->hw_decode,
+                                   &job->hw_device_ctx);
         }
 
         sanitize_dynamic_hdr_metadata_passthru(job);
@@ -1672,6 +1714,12 @@ static void do_job(hb_job_t *job)
         init.color_range = job->passthru_dynamic_hdr_metadata & DOVI &&
                             job->dovi.dv_profile == 5 ?
                             title->color_range : AVCOL_RANGE_MPEG;
+#if HB_PROJECT_FEATURE_QSV
+        if (hb_qsv_full_path_is_enabled(job))
+        {
+            init.color_range = (job->qsv.ctx->out_range == AVCOL_RANGE_UNSPECIFIED) ? title->color_range : job->qsv.ctx->out_range;
+        }
+#endif
         init.chroma_location = title->chroma_location;
         init.geometry = title->geometry;
         memset(init.crop, 0, sizeof(int[4]));
@@ -1850,7 +1898,7 @@ static void do_job(hb_job_t *job)
     }
 
     // Video decoder
-    w = hb_video_decoder(job->h, title->video_codec, title->video_codec_param);
+    w = hb_video_decoder(job->h, title->video_codec, title->video_codec_param, job->hw_device_ctx);
     if (w == NULL)
     {
         *job->done_error = HB_ERROR_WRONG_INPUT;
@@ -2096,7 +2144,7 @@ cleanup:
     }
 
     hb_buffer_pool_free();
-    hb_hwaccel_hw_ctx_close(job);
+    hb_hwaccel_hw_ctx_close(&job->hw_device_ctx);
 
 #if HB_PROJECT_FEATURE_QSV
     if (!job->indepth_scan &&

@@ -1,6 +1,6 @@
 /* nvenc_common.h
  *
- * Copyright (c) 2003-2022 HandBrake Team
+ * Copyright (c) 2003-2023 HandBrake Team
  * This file is part of the HandBrake source code.
  * Homepage: <http://handbrake.fr/>.
  * It may be used under the terms of the GNU General Public License v2.
@@ -19,5 +19,7 @@ int            hb_check_nvenc_available();
 int            hb_check_nvdec_available();
 
 const char * hb_map_nvenc_preset_name (const char *preset);
+
+int hb_nvenc_are_filters_supported(hb_list_t *filters);
 
 #endif // HANDBRAKE_NVENC_COMMON_H

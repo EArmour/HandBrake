@@ -1,6 +1,6 @@
 /* batch.c
 
-   Copyright (c) 2003-2022 HandBrake Team
+   Copyright (c) 2003-2023 HandBrake Team
    This file is part of the HandBrake source code
    Homepage: <http://handbrake.fr/>.
    It may be used under the terms of the GNU General Public License v2.
@@ -60,7 +60,11 @@ hb_batch_t * hb_batch_init( hb_handle_t *h, char * path, hb_list_t * exclude_ext
     }
 
     files = malloc(count * sizeof(char*));
-    
+    if (files == NULL)
+    {
+        return NULL;
+    }
+
     // Excluded Extensions
     int extension_count = hb_list_count(exclude_extensions);
     hb_log("Excluding %i file extension(s) from scan. ", extension_count);
@@ -116,6 +120,11 @@ hb_batch_t * hb_batch_init( hb_handle_t *h, char * path, hb_list_t * exclude_ext
 
     // Create file list
     d = calloc( sizeof( hb_batch_t ), 1 );
+    if (d == NULL)
+    {
+        free(files);
+        return NULL;
+    }
     d->h = h;
     d->list_file = hb_list_init();
     for (ii = 0; ii < count; ii++)

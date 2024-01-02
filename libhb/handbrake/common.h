@@ -1,6 +1,6 @@
 /* common.h
 
-   Copyright (c) 2003-2022 HandBrake Team
+   Copyright (c) 2003-2023 HandBrake Team
    This file is part of the HandBrake source code
    Homepage: <http://handbrake.fr/>.
    It may be used under the terms of the GNU General Public License v2.
@@ -314,7 +314,6 @@ struct hb_image_s
         int width;
         int height;
         int stride;
-        int height_stride;
         int size;
     } plane[4];
 };
@@ -618,6 +617,7 @@ struct hb_job_s
 #define HB_VCODEC_FFMPEG_VCE_H264           (0x0000000D | HB_VCODEC_FFMPEG_MASK | HB_VCODEC_H264_MASK)
 #define HB_VCODEC_FFMPEG_VCE_H265           (0x0000000E | HB_VCODEC_FFMPEG_MASK | HB_VCODEC_H265_MASK)
 #define HB_VCODEC_FFMPEG_VCE_H265_10BIT     (0x0000000F | HB_VCODEC_FFMPEG_MASK | HB_VCODEC_H265_MASK)
+#define HB_VCODEC_FFMPEG_VCE_AV1            (0x00000010 | HB_VCODEC_FFMPEG_MASK | HB_VCODEC_AV1_MASK)
 
 #define HB_VCODEC_FFMPEG_MF_H264    (0x00000020 | HB_VCODEC_FFMPEG_MASK | HB_VCODEC_H264_MASK)
 #define HB_VCODEC_FFMPEG_MF_H265    (0x00000021 | HB_VCODEC_FFMPEG_MASK | HB_VCODEC_H265_MASK)
@@ -683,6 +683,7 @@ struct hb_job_s
 // see https://developer.apple.com/library/content/technotes/tn2162/_index.html
 //     https://developer.apple.com/library/content/documentation/QuickTime/QTFF/QTFFChap3/qtff3.html#//apple_ref/doc/uid/TP40000939-CH205-125526
 //     libav pixfmt.h
+#define HB_COLR_PRI_UNSET       -1
 #define HB_COLR_PRI_BT709        1
 #define HB_COLR_PRI_UNDEF        2
 #define HB_COLR_PRI_BT470M       4
@@ -696,6 +697,7 @@ struct hb_job_s
 #define HB_COLR_PRI_SMPTE432     12
 #define HB_COLR_PRI_JEDEC_P22    22
 // 0, 3-4, 7-8, 10-65535: reserved/not implemented
+#define HB_COLR_TRA_UNSET       -1
 #define HB_COLR_TRA_BT709        1 // also use for bt470m, bt470bg, smpte170m, bt2020_10 and bt2020_12
 #define HB_COLR_TRA_UNDEF        2
 #define HB_COLR_TRA_GAMMA22      4
@@ -714,6 +716,7 @@ struct hb_job_s
 #define HB_COLR_TRA_SMPTE428     17
 #define HB_COLR_TRA_ARIB_STD_B67 18 //known as "Hybrid log-gamma"
 // 0, 3-6, 8-15, 17-65535: reserved/not implemented
+#define HB_COLR_MAT_UNSET       -1
 #define HB_COLR_MAT_RGB          0
 #define HB_COLR_MAT_BT709        1
 #define HB_COLR_MAT_UNDEF        2
@@ -790,7 +793,7 @@ struct hb_job_s
                                         // faithful reproduction of the source
                                         // stream and may have blank frames
                                         // added or initial frames dropped.
-    int             mp4_optimize;
+    int             optimize;
     int             ipod_atom;
 
     int                     indepth_scan;
@@ -853,7 +856,7 @@ struct hb_job_s
 };
 
 /* Audio starts here */
-/* Audio Codecs: Update win/CS/HandBrake.Interop/HandBrakeInterop/HbLib/NativeConstants.cs when changing these consts */
+/* Audio Codecs: Update win/CS/HandBrake.Interop/Interop/HbLib/NativeConstants.cs when changing these consts */
 #define HB_ACODEC_INVALID   0x00000000
 #define HB_ACODEC_NONE      0x00000001
 #define HB_ACODEC_MASK      0x0FFFFF01
@@ -1206,6 +1209,7 @@ struct hb_title_s
     uint32_t        video_stream_type;      /* stream type from source stream */
     int             video_codec_param;      /* codec specific config */
     char          * video_codec_name;
+    int             video_codec_profile;
     int             video_bitrate;
     hb_rational_t   video_timebase;
     char          * container_name;
@@ -1366,6 +1370,7 @@ struct hb_work_object_s
     int                 status;
     int                 frame_count;
     int                 codec_param;
+    void              * hw_device_ctx;
     hb_title_t        * title;
 
     hb_work_object_t  * next;
@@ -1473,18 +1478,36 @@ struct hb_filter_object_s
 #endif
 };
 
+struct hb_motion_metric_object_s
+{
+    char                * name;
+
+#ifdef __LIBHB__
+    int                (* init)       ( hb_motion_metric_object_t *, hb_filter_init_t * );
+    float              (* work)       ( hb_motion_metric_object_t *,
+                                        hb_buffer_t *, hb_buffer_t * );
+    void               (* close)      ( hb_motion_metric_object_t * );
+
+    hb_motion_metric_private_t * private_data;
+#endif
+};
+
 // Update win/CS/HandBrake.Interop/HandBrakeInterop/HbLib/hb_filter_ids.cs when changing this enum
 enum
 {
     HB_FILTER_INVALID = 0,
     HB_FILTER_FIRST = 1,
 
+    HB_FILTER_PRE_VT,
     // First, filters that may change the framerate (drop or dup frames)
     HB_FILTER_DETELECINE,
     HB_FILTER_COMB_DETECT,
+    HB_FILTER_COMB_DETECT_VT,
     HB_FILTER_DECOMB,
     HB_FILTER_YADIF,
+    HB_FILTER_YADIF_VT,
     HB_FILTER_BWDIF,
+    HB_FILTER_BWDIF_VT,
     HB_FILTER_VFR,
     // Filters that must operate on the original source image are next
     HB_FILTER_DEBLOCK,
@@ -1492,15 +1515,20 @@ enum
     HB_FILTER_HQDN3D = HB_FILTER_DENOISE,
     HB_FILTER_NLMEANS,
     HB_FILTER_CHROMA_SMOOTH,
+    HB_FILTER_CHROMA_SMOOTH_VT,
     HB_FILTER_ROTATE,
     HB_FILTER_ROTATE_VT,
     HB_FILTER_RENDER_SUB,
     HB_FILTER_CROP_SCALE,
     HB_FILTER_CROP_SCALE_VT,
     HB_FILTER_LAPSHARP,
+    HB_FILTER_LAPSHARP_VT,
     HB_FILTER_UNSHARP,
+    HB_FILTER_UNSHARP_VT,
     HB_FILTER_GRAYSCALE,
+    HB_FILTER_GRAYSCALE_VT,
     HB_FILTER_PAD,
+    HB_FILTER_PAD_VT,
     HB_FILTER_COLORSPACE,
     HB_FILTER_FORMAT,
     HB_FILTER_RPU,
@@ -1551,6 +1579,7 @@ char ** hb_str_vsplit( const char * str, char delem );
 int hb_yuv2rgb(int yuv);
 int hb_rgb2yuv(int rgb);
 int hb_rgb2yuv_bt709(int rgb);
+int hb_rgb2yuv_bt2020(int rgb);
 
 const char * hb_subsource_name( int source );
 

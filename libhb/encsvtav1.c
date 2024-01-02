@@ -183,7 +183,11 @@ int encsvtInit(hb_work_object_t *w, hb_job_t *job)
         }
     }
 
-    if (job->encoder_tune != NULL && strstr("psnr", job->encoder_tune) != NULL)
+    if (job->encoder_tune != NULL && strstr("ssim", job->encoder_tune) != NULL)
+    {
+        param->tune = 2;
+    }
+    else if (job->encoder_tune != NULL && strstr("psnr", job->encoder_tune) != NULL)
     {
         param->tune = 1;
     }
@@ -371,6 +375,10 @@ void encsvtClose(hb_work_object_t *w)
     }
     if (pv->in_buf)
     {
+        if (pv->in_buf->metadata)
+        {
+            svt_metadata_array_free(&pv->in_buf->metadata);
+        }
         av_free(pv->in_buf->p_buffer);
         av_freep(&pv->in_buf);
     }

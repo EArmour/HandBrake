@@ -1,6 +1,6 @@
 /* fifo.c
 
-   Copyright (c) 2003-2022 HandBrake Team
+   Copyright (c) 2003-2023 HandBrake Team
    Copyright 2022 NVIDIA Corporation
    This file is part of the HandBrake source code
    Homepage: <http://handbrake.fr/>.
@@ -18,11 +18,11 @@
 
 #ifdef __APPLE__
 #include <CoreMedia/CoreMedia.h>
+#include "platform/macosx/vt_common.h"
 #endif
 
 #ifndef SYS_DARWIN
-#if defined( SYS_FREEBSD ) || defined ( __FreeBSD__ ) || defined(SYS_NETBSD) || \
-    defined( SYS_OPENBSD ) || defined ( __OpenBSD__ )
+#if defined( SYS_FREEBSD ) || defined( SYS_NETBSD ) || defined( SYS_OPENBSD )
 #include <stdlib.h>
 #else
 #include <malloc.h>
@@ -493,15 +493,19 @@ void hb_buffer_realloc( hb_buffer_t * b, int size )
 
 void hb_buffer_reduce( hb_buffer_t * b, int size )
 {
-
     if (b->storage_type == STANDARD && (size < b->alloc / 8 || b->data == NULL))
     {
-        hb_buffer_t * tmp = hb_buffer_init( size );
-
-        hb_buffer_swap_copy( b, tmp );
-        memcpy( b->data, tmp->data, size );
-        tmp->next = NULL;
-        hb_buffer_close( &tmp );
+        hb_buffer_t *tmp = hb_buffer_init(size);
+        if (tmp)
+        {
+            hb_buffer_swap_copy(b, tmp);
+            if (tmp->data)
+            {
+                memcpy(b->data, tmp->data, size);
+            }
+            tmp->next = NULL;
+        }
+        hb_buffer_close(&tmp);
     }
 }
 
@@ -509,39 +513,51 @@ AVFrameSideData *hb_buffer_new_side_data_from_buf(hb_buffer_t *buf,
                                                   enum AVFrameSideDataType type,
                                                   AVBufferRef *side_data_buf)
 {
-    AVFrameSideData *ret, **tmp;
-
-    if (!buf)
+    AVFrameSideData *ret;
+    if (buf->storage_type == AVFRAME)
     {
-        return NULL;
+        AVFrame *frame = (AVFrame *)buf->storage;
+        ret = av_frame_new_side_data_from_buf(frame, type, side_data_buf);
+        buf->side_data = (void **)frame->side_data;
+        buf->nb_side_data = frame->nb_side_data;
+        return ret;
     }
-
-    if (buf->nb_side_data > INT_MAX / sizeof(*buf->side_data) - 1)
+    else
     {
-        return NULL;
+        AVFrameSideData **tmp;
+
+        if (!buf)
+        {
+            return NULL;
+        }
+
+        if (buf->nb_side_data > INT_MAX / sizeof(*buf->side_data) - 1)
+        {
+            return NULL;
+        }
+
+        tmp = av_realloc(buf->side_data, (buf->nb_side_data + 1) * sizeof(*buf->side_data));
+        if (!tmp)
+        {
+            return NULL;
+        }
+        buf->side_data = (void **)tmp;
+
+        ret = av_mallocz(sizeof(*ret));
+        if (!ret)
+        {
+            return NULL;
+        }
+
+        ret->buf = side_data_buf;
+        ret->data = ret->buf->data;
+        ret->size = side_data_buf->size;
+        ret->type = type;
+
+        buf->side_data[buf->nb_side_data++] = ret;
+
+        return ret;
     }
-
-    tmp = av_realloc(buf->side_data, (buf->nb_side_data + 1) * sizeof(*buf->side_data));
-    if (!tmp)
-    {
-        return NULL;
-    }
-    buf->side_data = (void **)tmp;
-
-    ret = av_mallocz(sizeof(*ret));
-    if (!ret)
-    {
-        return NULL;
-    }
-
-    ret->buf = side_data_buf;
-    ret->data = ret->buf->data;
-    ret->size = side_data_buf->size;
-    ret->type = type;
-
-    buf->side_data[buf->nb_side_data++] = ret;
-
-    return ret;
 }
 
 static void free_side_data(AVFrameSideData **ptr_sd)
@@ -553,16 +569,25 @@ static void free_side_data(AVFrameSideData **ptr_sd)
     av_freep(ptr_sd);
 }
 
-void hb_frame_remove_side_data(hb_buffer_t *buf, enum AVFrameSideDataType type)
+void hb_buffer_remove_side_data(hb_buffer_t *buf, enum AVFrameSideDataType type)
 {
-    for (int i = buf->nb_side_data - 1; i >= 0; i--)
+    if (buf->storage_type == AVFRAME)
     {
-        AVFrameSideData *sd = buf->side_data[i];
-        if (sd->type == type)
+        AVFrame *frame = (AVFrame *)buf->storage;
+        av_frame_remove_side_data(frame, type);
+        buf->nb_side_data = frame->nb_side_data;
+    }
+    else
+    {
+        for (int i = buf->nb_side_data - 1; i >= 0; i--)
         {
-            free_side_data((AVFrameSideData **)&buf->side_data[i]);
-            buf->side_data[i] = buf->side_data[buf->nb_side_data - 1];
-            buf->nb_side_data--;
+            AVFrameSideData *sd = buf->side_data[i];
+            if (sd->type == type)
+            {
+                free_side_data((AVFrameSideData **)&buf->side_data[i]);
+                buf->side_data[i] = buf->side_data[buf->nb_side_data - 1];
+                buf->nb_side_data--;
+            }
         }
     }
 }
@@ -599,70 +624,133 @@ void hb_buffer_copy_props(hb_buffer_t *dst, const hb_buffer_t *src)
     hb_buffer_copy_side_data(dst, src);
 }
 
-hb_buffer_t * hb_buffer_dup( const hb_buffer_t * src )
+static int copy_hwframe_to_video_buffer(const AVFrame *frame, hb_buffer_t *buf)
 {
+    int ret;
+    AVFrame *hw_frame = av_frame_alloc();
 
-    hb_buffer_t * buf;
-
-    if ( src == NULL )
-        return NULL;
-
-    buf = hb_buffer_init( src->size );
-    if ( buf )
+    ret = av_frame_copy_props(hw_frame, frame);
+    if (ret < 0)
     {
-        buf->f = src->f;
-        hb_buffer_copy_props(buf, src);
+        hb_log("fifo: av_frame_copy_props");
+    }
+    ret = av_hwframe_get_buffer(frame->hw_frames_ctx, hw_frame, 0);
+    if (ret < 0)
+    {
+        hb_log("fifo: av_hwframe_get_buffer failed");
+    }
+    ret = av_hwframe_transfer_data(hw_frame, frame, 0);
+    if (ret < 0)
+    {
+        hb_log("fifo: av_hwframe_transfer_data failed");
+    }
 
-        if (buf->s.type == FRAME_BUF)
+    buf->storage = hw_frame;
+    buf->storage_type = AVFRAME;
+
+    return ret;
+}
+
+static void copy_avframe_to_video_buffer(const AVFrame *frame, hb_buffer_t *buf)
+{
+    for (int pp = 0; pp <= buf->f.max_plane; pp++)
+    {
+        if (buf->plane[pp].stride == frame->linesize[pp])
         {
-            hb_buffer_init_planes(buf);
-        }
-
-        if (src->storage_type == AVFRAME)
-        {
-            AVBufferRef *hw_frames_ctx = ((AVFrame *)src->storage)->hw_frames_ctx;
-            if (hw_frames_ctx)
-            {
-                AVFrame *hw_frame = av_frame_alloc();
-
-                int ret;
-
-                ret = av_frame_copy_props(hw_frame, (AVFrame *)src->storage);
-                if (ret < 0)
-                {
-                    hb_log("fifo: av_frame_copy_props");
-                }
-                ret = av_hwframe_get_buffer(hw_frames_ctx, hw_frame, 0);
-                if (ret < 0)
-                {
-                    hb_log("fifo: av_hwframe_get_buffer failed");
-                }
-                ret = av_hwframe_transfer_data(hw_frame, (AVFrame *)src->storage, 0);
-                if (ret < 0)
-                {
-                    hb_log("fifo: av_hwframe_transfer_data failed");
-                }
-
-                buf->storage = hw_frame;
-                buf->storage_type = AVFRAME;
-            }
-            else
-            {
-                for (int pp = 0; pp <= src->f.max_plane; pp++)
-                {
-                    memcpy(buf->plane[pp].data, src->plane[pp].data, src->plane[pp].size);
-                }
-            }
+            memcpy(buf->plane[pp].data, frame->data[pp], frame->linesize[pp] * buf->plane[pp].height);
         }
         else
         {
-            memcpy( buf->data, src->data, src->size );
+            const int stride    = buf->plane[pp].stride;
+            const int height    = buf->plane[pp].height;
+            const int linesize  = frame->linesize[pp];
+            const int size = linesize < stride ? ABS(linesize) : stride;
+            uint8_t *dst = buf->plane[pp].data;
+            uint8_t *src = frame->data[pp];
+            for (int yy = 0; yy < height; yy++)
+            {
+                memcpy(dst, src, size);
+                dst += stride;
+                src += linesize;
+            }
         }
+    }
+}
 
+hb_buffer_t * hb_buffer_dup(const hb_buffer_t *src)
+{
+    hb_buffer_t *buf = NULL;
+
+    if (src == NULL)
+    {
+        return NULL;
     }
 
+    if (src->storage_type == STANDARD)
+    {
+        buf = hb_buffer_init(src->size);
+        if (buf)
+        {
+            buf->f = src->f;
+            hb_buffer_copy_props(buf, src);
+
+            if (buf->s.type == FRAME_BUF)
+            {
+                hb_buffer_init_planes(buf);
+            }
+
+            memcpy(buf->data, src->data, src->size);
+        }
+    }
+    else if (src->storage_type == AVFRAME)
+    {
+        const AVFrame *frame = (AVFrame *)src->storage;
+
+        // If it's an hardware frame, make a copy
+        // into another hardware AVFrame.
+        if (frame->hw_frames_ctx)
+        {
+#ifdef __APPLE__
+            if (frame->format == AV_PIX_FMT_VIDEOTOOLBOX)
+            {
+                buf = hb_vt_buffer_dup(src);
+            }
+            else
+#endif
+            {
+                buf = hb_buffer_wrapper_init();
+                if (buf)
+                {
+                    buf->f = src->f;
+                    hb_buffer_copy_props(buf, src);
+                    copy_hwframe_to_video_buffer(frame, buf);
+                }
+            }
+        }
+        // If not, copy the content to a standard hb_buffer
+        else
+        {
+            buf = hb_frame_buffer_init(src->f.fmt, src->f.width, src->f.height);
+            if (buf)
+            {
+                buf->f = src->f;
+                hb_buffer_copy_props(buf, src);
+                copy_avframe_to_video_buffer(frame, buf);
+            }
+        }
+    }
+#ifdef __APPLE__
+    else if (src->storage_type == COREMEDIA)
+    {
+        buf = hb_vt_buffer_dup(src);
+    }
+#endif
+
 #if HB_PROJECT_FEATURE_QSV
-    memcpy(&buf->qsv_details, &src->qsv_details, sizeof(src->qsv_details));
+    if (buf)
+    {
+        memcpy(&buf->qsv_details, &src->qsv_details, sizeof(src->qsv_details));
+    }
 #endif
 
     return buf;
@@ -694,12 +782,10 @@ void hb_buffer_init_planes(hb_buffer_t * b)
     {
         b->plane[pp].data = data;
         b->plane[pp].stride        = hb_image_stride(b->f.fmt, b->f.width, pp);
-        b->plane[pp].height_stride = hb_image_height_stride(b->f.fmt,
-                                                            b->f.height, pp);
         b->plane[pp].width         = hb_image_width(b->f.fmt, b->f.width, pp);
         b->plane[pp].height        = hb_image_height(b->f.fmt, b->f.height, pp);
         b->plane[pp].size          = b->plane[pp].stride *
-                                     b->plane[pp].height_stride;
+                                     b->plane[pp].height;
         data                      += b->plane[pp].size;
     }
 }
@@ -730,7 +816,7 @@ hb_buffer_t * hb_frame_buffer_init( int pix_fmt, int width, int height )
         {
             has_plane[pp] = 1;
             size += hb_image_stride( pix_fmt, width, pp ) *
-                    hb_image_height_stride( pix_fmt, height, pp );
+                    hb_image_height( pix_fmt, height, pp );
         }
     }
 
@@ -753,7 +839,7 @@ hb_buffer_t * hb_frame_buffer_init( int pix_fmt, int width, int height )
 void hb_frame_buffer_blank_stride(hb_buffer_t * buf)
 {
     uint8_t * data;
-    int       pp, yy, width, height, stride, height_stride;
+    int       pp, yy, width, height, stride;
 
     for (pp = 0; pp <= buf->f.max_plane; pp++)
     {
@@ -761,7 +847,6 @@ void hb_frame_buffer_blank_stride(hb_buffer_t * buf)
         width         = buf->plane[pp].width;
         height        = buf->plane[pp].height;
         stride        = buf->plane[pp].stride;
-        height_stride = buf->plane[pp].height_stride;
 
         if (data != NULL)
         {
@@ -769,11 +854,6 @@ void hb_frame_buffer_blank_stride(hb_buffer_t * buf)
             for (yy = 0; yy < height; yy++)
             {
                 memset(data + yy * stride + width, 0x80, stride - width);
-            }
-            // Blank bottom margin
-            for (yy = height; yy < height_stride; yy++)
-            {
-                memset(data + yy * stride, 0x80, stride);
             }
         }
     }
@@ -783,7 +863,7 @@ void hb_frame_buffer_mirror_stride(hb_buffer_t * buf)
 {
     const AVPixFmtDescriptor * desc = av_pix_fmt_desc_get(buf->f.fmt);
     uint8_t * data;
-    int       pp, ii, yy, width, height, stride, height_stride;
+    int       pp, ii, yy, width, height, stride;
     int       bps, pos, margin, margin_front, margin_back;
 
     bps = desc->comp[0].depth > 8 ? 2 : 1;
@@ -794,7 +874,6 @@ void hb_frame_buffer_mirror_stride(hb_buffer_t * buf)
         width         = buf->plane[pp].width;
         height        = buf->plane[pp].height;
         stride        = buf->plane[pp].stride;
-        height_stride = buf->plane[pp].height_stride;
         if (data != NULL)
         {
             margin       = stride / bps - width;
@@ -815,13 +894,6 @@ void hb_frame_buffer_mirror_stride(hb_buffer_t * buf)
                 {
                     *(data + pos - ii) = *(data + pos + ii + 1);
                 }
-            }
-            // Mirror bottom rows into height_stride
-            pos = height * stride;
-            for (ii = 0; ii < height_stride - height; ii++)
-            {
-                memcpy(data + pos + ii * stride,
-                       data + pos - ((ii + 1) * stride), stride);
             }
         }
     }
@@ -853,7 +925,7 @@ void hb_video_buffer_realloc( hb_buffer_t * buf, int width, int height )
         {
             has_plane[pp] = 1;
             size += hb_image_stride(buf->f.fmt, width, pp) *
-                    hb_image_height_stride(buf->f.fmt, height, pp );
+                    hb_image_height(buf->f.fmt, height, pp );
         }
     }
 
@@ -892,15 +964,15 @@ void hb_buffer_close( hb_buffer_t ** _b )
 #if HB_PROJECT_FEATURE_QSV
         // Reclaim QSV resources before dropping the buffer.
         // when decoding without QSV, the QSV atom will be NULL.
-        if(b->qsv_details.frame && b->qsv_details.ctx != NULL)
+        if (b->storage != NULL && b->qsv_details.ctx != NULL)
         {
-            mfxFrameSurface1 *surface = (mfxFrameSurface1*)b->qsv_details.frame->data[3];
-            if(surface)
+            AVFrame *frame = (AVFrame *)b->storage;
+            mfxFrameSurface1 *surface = (mfxFrameSurface1 *)frame->data[3];
+            if (surface)
             {
                 hb_qsv_release_surface_from_pool_by_surface_pointer(b->qsv_details.qsv_frames_ctx, surface);
-                b->qsv_details.frame->data[3] = 0;
+                frame->data[3] = 0;
             }
-            av_frame_unref(b->qsv_details.frame);
         }
         if (b->qsv_details.qsv_atom != NULL && b->qsv_details.ctx != NULL)
         {
@@ -1009,7 +1081,7 @@ hb_image_t * hb_image_init(int pix_fmt, int width, int height)
         {
             has_plane[pp] = 1;
             size += hb_image_stride( pix_fmt, width, pp ) *
-                    hb_image_height_stride( pix_fmt, height, pp );
+                    hb_image_height( pix_fmt, height, pp );
         }
     }
 
@@ -1029,12 +1101,10 @@ hb_image_t * hb_image_init(int pix_fmt, int width, int height)
     {
         image->plane[pp].data   = data;
         image->plane[pp].stride = hb_image_stride(pix_fmt, width, pp);
-        image->plane[pp].height_stride =
-                                hb_image_height_stride(pix_fmt, height, pp);
         image->plane[pp].width  = hb_image_width(pix_fmt, width, pp);
         image->plane[pp].height = hb_image_height(pix_fmt, height, pp);
         image->plane[pp].size   = image->plane[pp].stride *
-                                  image->plane[pp].height_stride;
+                                  image->plane[pp].height;
         data                   += image->plane[pp].size;
     }
     return image;
@@ -1066,7 +1136,6 @@ hb_image_t * hb_buffer_to_image(hb_buffer_t *buf)
         image->plane[p].width = buf->plane[p].width;
         image->plane[p].height = buf->plane[p].height;
         image->plane[p].stride = buf->plane[p].stride;
-        image->plane[p].height_stride = buf->plane[p].height_stride;
         image->plane[p].size = buf->plane[p].size;
 
         memcpy(image->plane[p].data, buf->plane[p].data, buf->plane[p].size);

@@ -1,6 +1,6 @@
 /* scan.c
 
-   Copyright (c) 2003-2022 HandBrake Team
+   Copyright (c) 2003-2023 HandBrake Team
    This file is part of the HandBrake source code
    Homepage: <http://handbrake.fr/>.
    It may be used under the terms of the GNU General Public License v2.
@@ -9,6 +9,7 @@
 
 #include "handbrake/handbrake.h"
 #include "handbrake/hbffmpeg.h"
+#include "handbrake/hwaccel.h"
 
 typedef struct
 {
@@ -33,6 +34,8 @@ typedef struct
     int            crop_threshold_pixels;
     
     hb_list_t    * exclude_extensions;
+
+    int            hw_decode;
     
 } hb_scan_t;
 
@@ -222,7 +225,8 @@ hb_thread_t * hb_scan_init( hb_handle_t * handle, volatile int * die,
                             hb_list_t *  paths, int title_index,
                             hb_title_set_t * title_set, int preview_count,
                             int store_previews, uint64_t min_duration,
-                            int crop_threshold_frames, int crop_threshold_pixels, hb_list_t * exclude_extensions)
+                            int crop_threshold_frames, int crop_threshold_pixels,
+                            hb_list_t * exclude_extensions, int hw_decode)
 {
     hb_scan_t * data = calloc( sizeof( hb_scan_t ), 1 );
 
@@ -239,6 +243,7 @@ hb_thread_t * hb_scan_init( hb_handle_t * handle, volatile int * die,
     data->crop_threshold_frames = crop_threshold_frames;
     data->crop_threshold_pixels = crop_threshold_pixels;
     data->exclude_extensions    = hb_string_list_copy(exclude_extensions);
+    data->hw_decode             = hw_decode;
     
     // Initialize scan state
     hb_state_t state;
@@ -370,7 +375,7 @@ static void ScanFunc( void * _data )
             }
         }
     }
-    else // Single File.
+    else if (single_path != NULL) // Single File.
     {
         // Title index 0 is not a valid title number and means scan all titles.
         // So set title index to 1 in this scenario.
@@ -815,8 +820,29 @@ static int DecodePreviews( hb_scan_t * data, hb_title_t * title, int flush )
         hb_stream_close(&stream);
         return 0;
     }
+
+    int hw_decode = 0;
+
+    if (data->hw_decode == HB_DECODE_SUPPORT_NVDEC &&
+        hb_hwaccel_available(title->video_codec_param, "cuda"))
+    {
+        hw_decode = HB_DECODE_SUPPORT_NVDEC;
+    }
+    else if (data->hw_decode == HB_DECODE_SUPPORT_VIDEOTOOLBOX &&
+             hb_hwaccel_available(title->video_codec_param, "videotoolbox"))
+    {
+        hw_decode = HB_DECODE_SUPPORT_VIDEOTOOLBOX;
+    }
+
+    void *hw_device_ctx = NULL;
+    if (hw_decode)
+    {
+        hb_hwaccel_hw_ctx_init(title->video_codec_param, hw_decode, &hw_device_ctx);
+    }
+
     hb_work_object_t *vid_decoder = hb_get_work(data->h, title->video_codec);
     vid_decoder->codec_param = title->video_codec_param;
+    vid_decoder->hw_device_ctx = hw_device_ctx;
     vid_decoder->title = title;
 
     if (vid_decoder->init(vid_decoder, NULL))
@@ -1160,6 +1186,8 @@ skip_preview:
     vid_decoder->close( vid_decoder );
     free( vid_decoder );
 
+    hb_hwaccel_hw_ctx_close(&hw_device_ctx);
+
     if (stream != NULL)
     {
         hb_stream_close(&stream);
@@ -1176,6 +1204,7 @@ skip_preview:
         {
             title->video_codec_name = strdup( vid_info.name );
         }
+        title->video_codec_profile = vid_info.profile;
         title->geometry.width = vid_info.geometry.width;
         title->geometry.height = vid_info.geometry.height;
         if (vid_info.rate.num && vid_info.rate.den)
@@ -1274,11 +1303,11 @@ skip_preview:
         title->pix_fmt = vid_info.pix_fmt;
 
         if ((title->color_prim     != HB_COLR_PRI_UNDEF &&
-             title->color_prim     != -1) ||
+             title->color_prim     != HB_COLR_PRI_UNSET) ||
             (title->color_transfer != HB_COLR_TRA_UNDEF &&
-             title->color_transfer != -1) ||
+             title->color_transfer != HB_COLR_TRA_UNSET) ||
             (title->color_matrix   != HB_COLR_MAT_UNDEF &&
-             title->color_matrix != -1))
+             title->color_matrix != HB_COLR_MAT_UNSET))
         {
             title->color_prim     = get_color_prim(title->color_prim, vid_info.geometry, vid_info.rate);
             title->color_transfer = get_color_transfer(title->color_transfer);
@@ -1703,40 +1732,40 @@ static void LookForAudio(hb_scan_t *scan, hb_title_t * title, hb_buffer_t * b)
     if (codec_name != NULL && profile_name != NULL)
     {
         snprintf(audio->config.lang.description, sizeof(audio->config.lang.description),
-                "%s (%s %s)", audio->config.lang.simple, codec_name, profile_name);
+                "%s (%s %s", audio->config.lang.simple, codec_name, profile_name);
     }
     else if (codec_name != NULL)
     {
         snprintf(audio->config.lang.description, sizeof(audio->config.lang.description),
-                "%s (%s)", audio->config.lang.simple, codec_name);
+                "%s (%s", audio->config.lang.simple, codec_name);
     }
     else if (profile_name != NULL)
     {
         snprintf(audio->config.lang.description, sizeof(audio->config.lang.description),
-                "%s (%s)", audio->config.lang.simple, profile_name);
+                "%s (%s", audio->config.lang.simple, profile_name);
     }
 
     if (audio->config.lang.attributes & HB_AUDIO_ATTR_VISUALLY_IMPAIRED)
     {
-        strncat(audio->config.lang.description, " (Visually Impaired)",
+        strncat(audio->config.lang.description, ", Visually Impaired",
                 sizeof(audio->config.lang.description) -
                 strlen(audio->config.lang.description) - 1);
     }
     if (audio->config.lang.attributes & HB_AUDIO_ATTR_COMMENTARY)
     {
-        strncat(audio->config.lang.description, " (Director's Commentary 1)",
+        strncat(audio->config.lang.description, ", Director's Commentary 1",
                 sizeof(audio->config.lang.description) -
                 strlen(audio->config.lang.description) - 1);
     }
     if (audio->config.lang.attributes & HB_AUDIO_ATTR_ALT_COMMENTARY)
     {
-        strncat(audio->config.lang.description, " (Director's Commentary 2)",
+        strncat(audio->config.lang.description, ", Director's Commentary 2",
                 sizeof(audio->config.lang.description) -
                 strlen(audio->config.lang.description) - 1);
     }
     if (audio->config.lang.attributes & HB_AUDIO_ATTR_SECONDARY)
     {
-        strncat(audio->config.lang.description, " (Secondary)",
+        strncat(audio->config.lang.description, ", Secondary",
                 sizeof(audio->config.lang.description) -
                 strlen(audio->config.lang.description) - 1);
     }
@@ -1749,7 +1778,7 @@ static void LookForAudio(hb_scan_t *scan, hb_title_t * title, hb_buffer_t * b)
         char *desc   = audio->config.lang.description +
                         strlen(audio->config.lang.description);
         size_t size = sizeof(audio->config.lang.description) - strlen(audio->config.lang.description);
-        snprintf(desc, size, " (%d.%d ch)", channels - lfes, lfes);
+        snprintf(desc, size, ", %d.%d ch", channels - lfes, lfes);
 
         // describe the matrix encoding mode, if any
         switch (audio->config.in.matrix_encoding)
@@ -1760,25 +1789,25 @@ static void LookForAudio(hb_scan_t *scan, hb_title_t * title, hb_buffer_t * b)
                     audio->config.in.codec_param == AV_CODEC_ID_EAC3 ||
                     audio->config.in.codec_param == AV_CODEC_ID_TRUEHD)
                 {
-                    strcat(audio->config.lang.description, " (Dolby Surround)");
+                    strcat(audio->config.lang.description, ", Dolby Surround");
                     break;
                 }
-                strcat(audio->config.lang.description, " (Lt/Rt)");
+                strcat(audio->config.lang.description, ", Lt/Rt)");
                 break;
             case AV_MATRIX_ENCODING_DPLII:
-                strcat(audio->config.lang.description, " (Dolby Pro Logic II)");
+                strcat(audio->config.lang.description, ", Dolby Pro Logic II");
                 break;
             case AV_MATRIX_ENCODING_DPLIIX:
-                strcat(audio->config.lang.description, " (Dolby Pro Logic IIx)");
+                strcat(audio->config.lang.description, ", Dolby Pro Logic IIx");
                 break;
             case AV_MATRIX_ENCODING_DPLIIZ:
-                strcat(audio->config.lang.description, " (Dolby Pro Logic IIz)");
+                strcat(audio->config.lang.description, ", Dolby Pro Logic IIz");
                 break;
             case AV_MATRIX_ENCODING_DOLBYEX:
-                strcat(audio->config.lang.description, " (Dolby Digital EX)");
+                strcat(audio->config.lang.description, ", Dolby Digital EX");
                 break;
             case AV_MATRIX_ENCODING_DOLBYHEADPHONE:
-                strcat(audio->config.lang.description, " (Dolby Headphone)");
+                strcat(audio->config.lang.description, ", Dolby Headphone");
                 break;
             default:
                 break;
@@ -1790,10 +1819,11 @@ static void LookForAudio(hb_scan_t *scan, hb_title_t * title, hb_buffer_t * b)
     if (audio->config.in.bitrate > 1)
     {
         char in_bitrate_str[19];
-        snprintf(in_bitrate_str, 18, " (%d kbps)", audio->config.in.bitrate / 1000);
+        snprintf(in_bitrate_str, 18, ", %d kbps", audio->config.in.bitrate / 1000);
         strncat(audio->config.lang.description, in_bitrate_str,
                 sizeof(audio->config.lang.description) - strlen(audio->config.lang.description) - 1);
     }
+    strcat(audio->config.lang.description, ")");
 
     hb_log( "scan: audio 0x%x: %s, rate=%dHz, bitrate=%d %s", audio->id,
             info.name, audio->config.in.samplerate, audio->config.in.bitrate,

@@ -1,6 +1,6 @@
 /* ports.h
 
-   Copyright (c) 2003-2022 HandBrake Team
+   Copyright (c) 2003-2023 HandBrake Team
    This file is part of the HandBrake source code
    Homepage: <http://handbrake.fr/>.
    It may be used under the terms of the GNU General Public License v2.
@@ -152,10 +152,7 @@ void hb_get_user_config_filename( char name[1024], char *fmt, ... );
  ***********************************************************************/
 typedef struct hb_thread_s hb_thread_t;
 
-#if defined( SYS_BEOS )
-#  define HB_LOW_PRIORITY    5
-#  define HB_NORMAL_PRIORITY 10
-#elif defined( SYS_DARWIN )
+#if defined( SYS_DARWIN )
 #  define HB_LOW_PRIORITY    31
 #  define HB_NORMAL_PRIORITY 31
 #elif defined( SYS_CYGWIN )

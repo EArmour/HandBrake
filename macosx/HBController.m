@@ -722,7 +722,9 @@ static void *HBControllerLogLevelContext = &HBControllerLogLevelContext;
 
         [self.core scanURLs:fileURLs
                  titleIndex:index
-                   previews:hb_num_previews minDuration:min_title_duration_seconds keepPreviews:YES
+                   previews:hb_num_previews minDuration:min_title_duration_seconds
+               keepPreviews:YES
+            hardwareDecoder:[NSUserDefaults.standardUserDefaults boolForKey:HBUseHardwareDecoder]
             progressHandler:^(HBState state, HBProgress progress, NSString *info)
          {
              self.sourceLabel.stringValue = info;
@@ -911,19 +913,8 @@ static void *HBControllerLogLevelContext = &HBControllerLogLevelContext;
     HBJob *job = [[HBJob alloc] initWithTitle:title preset:self.currentPreset];
     if (job)
     {
-        NSURL *destination = self.destinationFolderURL;
-
-        // If destination mode is set to same as source, try to set the source folder url
-        if (title.isStream && [NSUserDefaults.standardUserDefaults boolForKey:HBUseSourceFolderDestination])
-        {
-            NSURL *titleParentURL = title.url.URLByDeletingLastPathComponent;
-            if ([titleParentURL.path hasPrefix:self.destinationFolderURL.path])
-            {
-                destination = titleParentURL;
-            }
-        }
-
-        job.destinationFolderURL = destination;
+        [job setDestinationFolderURL:self.destinationFolderURL
+                        sameAsSource:[NSUserDefaults.standardUserDefaults boolForKey:HBUseSourceFolderDestination]];
 
         // If the source is not a stream, and autonaming is disabled,
         // keep the existing file name.
@@ -1370,6 +1361,7 @@ static void *HBControllerLogLevelContext = &HBControllerLogLevelContext;
     NSMutableArray<HBJob *> *jobs = [[NSMutableArray alloc] init];
     BOOL fileExists = NO;
     BOOL fileOverwritesSource = NO;
+    BOOL useSourceFolderDestination = [NSUserDefaults.standardUserDefaults boolForKey:HBUseSourceFolderDestination];
 
     // Get the preset from the loaded job.
     HBPreset *preset = [self createPresetFromCurrentSettings];
@@ -1377,7 +1369,10 @@ static void *HBControllerLogLevelContext = &HBControllerLogLevelContext;
     for (HBTitle *title in titles)
     {
         HBJob *job = [[HBJob alloc] initWithTitle:title preset:preset];
-        job.destinationFolderURL = self.destinationFolderURL;
+
+        [job setDestinationFolderURL:self.destinationFolderURL
+                        sameAsSource:useSourceFolderDestination];
+
         job.destinationFileName = job.defaultName;
         job.title = nil;
         if (job)

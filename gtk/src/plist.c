@@ -1,6 +1,6 @@
 /*
  * plist.c
- * Copyright (C) John Stebbins 2008-2022 <stebbins@stebbins>
+ * Copyright (C) John Stebbins 2008-2023 <stebbins@stebbins>
  *
  * plist.c is free software.
  *
@@ -104,7 +104,7 @@ start_element(
         gint id;
         gpointer pid;
     } id;
-    gint ii;
+    guint ii;
 
     // Check to see if the first element found has been closed
     // If so, ignore any junk following it.
@@ -216,7 +216,7 @@ end_element(
         gint id;
         gpointer pid;
     } start_id;
-    gint ii;
+    guint ii;
 
     // Check to see if the first element found has been closed
     // If so, ignore any junk following it.

@@ -1,7 +1,7 @@
 /* -*- Mode: C; indent-tabs-mode: nil; c-basic-offset: 4; tab-width: 4 -*- */
 /*
  * preview.c
- * Copyright (C) John Stebbins 2008-2022 <stebbins@stebbins>
+ * Copyright (C) John Stebbins 2008-2023 <stebbins@stebbins>
  *
  * preview.c is free software.
  *
@@ -22,6 +22,7 @@
  */
 
 #include "ghbcompat.h"
+#include "config.h"
 
 #include <unistd.h>
 #include <glib.h>
@@ -212,7 +213,7 @@ ghb_preview_init(signal_user_data_t *ud)
     if (ud->preview->play == NULL || ud->preview->vsink == NULL)
     {
         g_warning("Couldn't initialize gstreamer. Disabling live preview.");
-        GtkWidget *widget = GHB_WIDGET(ud->builder, "live_preview_box");
+        widget = GHB_WIDGET(ud->builder, "live_preview_box");
         gtk_widget_hide (widget);
         widget = GHB_WIDGET(ud->builder, "live_preview_duration_box");
         gtk_widget_hide (widget);
@@ -523,18 +524,12 @@ live_preview_cb(GstBus *bus, GstMessage *msg, gpointer data)
             //printf("element\n");
             if (gst_is_missing_plugin_message(msg))
             {
-                GtkWindow *hb_window;
-                hb_window = GTK_WINDOW(GHB_WIDGET(ud->builder, "hb_window"));
                 gst_element_set_state(ud->preview->play, GST_STATE_PAUSED);
-                gchar *message, *desc;
-                desc = gst_missing_plugin_message_get_description(msg);
-                message = g_strdup_printf(
-                            _("Missing GStreamer plugin\n"
-                            "Audio or Video may not play as expected\n\n%s"),
-                            desc);
-                ghb_message_dialog(hb_window, GTK_MESSAGE_WARNING,
-                                   message, _("OK"), NULL);
-                g_free(message);
+                gchar *desc = gst_missing_plugin_message_get_description(msg);
+                ghb_alert_dialog_show(GTK_MESSAGE_WARNING,_("Missing GStreamer plugin"),
+                                      "%s\n\n%s",
+                                      _("Audio or Video may not play as expected"),
+                                      desc);
                 gst_element_set_state(ud->preview->play, GST_STATE_PLAYING);
             }
             else if (msg->src == GST_OBJECT_CAST(ud->preview->vsink))
@@ -1155,8 +1150,9 @@ preview_button_size_allocate_cb(
     set_mini_preview_image(ud, ud->preview->pix);
 }
 
-void
-ghb_preview_set_visible(signal_user_data_t *ud, gboolean visible)
+G_MODULE_EXPORT void
+show_preview_action_cb(GSimpleAction *action, GVariant *value,
+                       signal_user_data_t *ud)
 {
     GtkWidget *widget;
 #if 0
@@ -1168,30 +1164,17 @@ ghb_preview_set_visible(signal_user_data_t *ud, gboolean visible)
     visible &= title != NULL;
 #endif
     widget = GHB_WIDGET(ud->builder, "preview_window");
-    if (visible)
-    {
+
 #if !GTK_CHECK_VERSION(4, 4, 0)
-        // TODO: can this be done in GTK4?
-        gint x, y;
-        x = ghb_dict_get_int(ud->prefs, "preview_x");
-        y = ghb_dict_get_int(ud->prefs, "preview_y");
+    // Note: Only works on GTK3 and with X11
+    gint x, y;
+    x = ghb_dict_get_int(ud->prefs, "preview_x");
+    y = ghb_dict_get_int(ud->prefs, "preview_y");
 
-        if (x >= 0 && y >= 0)
-            gtk_window_move(GTK_WINDOW(widget), x, y);
+    if (x >= 0 && y >= 0)
+        gtk_window_move(GTK_WINDOW(widget), x, y);
 #endif
-        gtk_window_deiconify(GTK_WINDOW(widget));
-    }
-    gtk_widget_set_visible(widget, visible);
-}
-
-G_MODULE_EXPORT void
-show_preview_action_cb(GSimpleAction *action, GVariant *value,
-                       signal_user_data_t *ud)
-{
-    gboolean state = g_variant_get_boolean(value);
-
-    g_simple_action_set_state(action, value);
-    ghb_preview_set_visible(ud, state);
+    gtk_window_present(GTK_WINDOW(widget));
 }
 
 G_MODULE_EXPORT void
@@ -1239,7 +1222,7 @@ preview_window_delete_cb(
     signal_user_data_t *ud)
 {
     live_preview_stop(ud);
-    g_action_activate(GHB_ACTION(ud->builder, "show-preview"), NULL);
+    gtk_widget_set_visible(widget, FALSE);
     return TRUE;
 }
 
@@ -1249,7 +1232,6 @@ preview_duration_changed_cb(GtkWidget *widget, signal_user_data_t *ud)
     ghb_log_func();
     ghb_live_reset(ud);
     ghb_widget_to_setting (ud->prefs, widget);
-    ghb_check_dependency(ud, widget, NULL);
     const gchar *name = ghb_get_setting_key(widget);
     ghb_pref_save(ud->prefs, name);
 }
@@ -1465,7 +1447,6 @@ preview_state_cb(
             GDK_WINDOW_STATE_ICONIFIED)
         {
             live_preview_stop(ud);
-			g_action_activate(GHB_ACTION(ud->builder, "show-preview"), NULL);
         }
         ud->preview->is_fullscreen = wse->new_window_state & GDK_WINDOW_STATE_FULLSCREEN;
     }
@@ -1523,11 +1504,22 @@ show_crop_changed_cb(GtkWidget *widget, signal_user_data_t *ud)
     //
     ghb_log_func();
     ghb_widget_to_setting(ud->prefs, widget);
-    ghb_check_dependency(ud, widget, NULL);
     ghb_live_reset(ud);
     if (gtk_widget_is_sensitive(widget))
         ghb_set_scale(ud, 0);
     ghb_pref_save(ud->prefs, "preview_show_crop");
     ghb_rescale_preview_image(ud);
 #endif
+}
+
+void
+ghb_preview_dispose (signal_user_data_t *ud)
+{
+    if (!ud || !ud->preview)
+        return;
+    if (ud->preview->pix)
+        g_object_unref(ud->preview->pix);
+    if (ud->preview->scaled_pix)
+        g_object_unref(ud->preview->scaled_pix);
+    g_free(ud->preview);
 }

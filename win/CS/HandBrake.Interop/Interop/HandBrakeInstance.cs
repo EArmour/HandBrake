@@ -142,7 +142,10 @@ namespace HandBrake.Interop.Interop
         /// These should be the extension name only. No .
         /// Case Insensitive.
         /// </param>
-        public void StartScan(List<string> paths, int previewCount, TimeSpan minDuration, int titleIndex, List<string> excludedExtensions)
+        /// <param name="hwDecode">
+        /// Hardware decoding during scans.
+        /// </param>
+        public void StartScan(List<string> paths, int previewCount, TimeSpan minDuration, int titleIndex, List<string> excludedExtensions, int hwDecode)
         {
             this.PreviewCount = previewCount;
 
@@ -166,7 +169,7 @@ namespace HandBrake.Interop.Interop
 
             // Start the Scan
             IntPtr excludedExtensionsPtr = excludedExtensionsNative?.Ptr ?? IntPtr.Zero;
-            HBFunctions.hb_scan_list(this.Handle, scanPathsList.Ptr, titleIndex, previewCount, 1, (ulong)(minDuration.TotalSeconds * 90000), 0, 0, excludedExtensionsPtr);
+            HBFunctions.hb_scan_list(this.Handle, scanPathsList.Ptr, titleIndex, previewCount, 1, (ulong)(minDuration.TotalSeconds * 90000), 0, 0, excludedExtensionsPtr, hwDecode);
 
             this.scanPollTimer = new Timer();
             this.scanPollTimer.Interval = ScanPollIntervalMs;
@@ -220,7 +223,7 @@ namespace HandBrake.Interop.Interop
 
             // Copy the filled image buffer to a managed array.
             int stride_width = image.plane[0].stride;
-            int stride_height = image.plane[0].height_stride;
+            int stride_height = image.plane[0].height;
             int imageBufferSize = stride_width * stride_height;
 
             byte[] managedBuffer = new byte[imageBufferSize];

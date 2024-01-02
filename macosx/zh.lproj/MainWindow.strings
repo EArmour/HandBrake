@@ -10,6 +10,9 @@
 /* Class = "NSButton"; ibShadowedToolTip = "Add To Queue"; ObjectID = "3xl-Xh-n9j"; */
 "3xl-Xh-n9j.ibShadowedToolTip" = "添加到队列";
 
+/* Class = "NSButton"; ibShadowedToolTip = "Recursively scan and open the content of every sub-folder."; ObjectID = "5hE-Ri-tcZ"; */
+"5hE-Ri-tcZ.ibShadowedToolTip" = "逐个扫描并打开每个子文件夹的内容。";
+
 /* Class = "NSTextFieldCell"; title = "0"; ObjectID = "6E4-AG-PEh"; */
 "6E4-AG-PEh.title" = "0";
 
@@ -210,6 +213,9 @@
 
 /* Class = "NSToolbarItem"; toolTip = "Show Queue Window"; ObjectID = "HCx-ku-nF7"; */
 "HCx-ku-nF7.toolTip" = "显示队列窗口";
+
+/* Class = "NSButtonCell"; title = "Recursively scan folders"; ObjectID = "Hwu-gp-tRZ"; */
+"Hwu-gp-tRZ.title" = "递归扫描文件夹";
 
 /* Class = "CocoaBindingsConnection"; ibShadowedIsNilPlaceholder = " "; ObjectID = "Iat-pL-ttI"; */
 "Iat-pL-ttI.ibShadowedIsNilPlaceholder" = "";

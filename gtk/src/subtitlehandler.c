@@ -1,7 +1,7 @@
 /* -*- Mode: C; indent-tabs-mode: nil; c-basic-offset: 4; tab-width: 4 -*- */
 /*
  * subtitlehandler.c
- * Copyright (C) John Stebbins 2008-2022 <stebbins@stebbins>
+ * Copyright (C) John Stebbins 2008-2023 <stebbins@stebbins>
  *
  * subtitlehandler.c is free software.
  *
@@ -556,30 +556,6 @@ set_pref_subtitle(signal_user_data_t *ud)
     subtitle_refresh_list_ui(ud);
 }
 
-static gint
-selected_subtitle_row (signal_user_data_t *ud)
-{
-    GtkTreeView *tv;
-    GtkTreePath *tp;
-    GtkTreeSelection *ts;
-    GtkTreeModel *tm;
-    GtkTreeIter iter;
-    gint *indices;
-    gint row = -1;
-
-    tv = GTK_TREE_VIEW(GHB_WIDGET(ud->builder, "subtitle_list_view"));
-    ts = gtk_tree_view_get_selection(tv);
-    if (gtk_tree_selection_get_selected(ts, &tm, &iter))
-    {
-        // Get the row number
-        tp = gtk_tree_model_get_path(tm, &iter);
-        indices = gtk_tree_path_get_indices(tp);
-        row = indices[0];
-        gtk_tree_path_free(tp);
-    }
-    return row;
-}
-
 static GhbValue*
 subtitle_get_selected_settings(signal_user_data_t *ud, int *index)
 {
@@ -981,16 +957,12 @@ import_offset_changed_cb(GtkWidget *widget, signal_user_data_t *ud)
     ghb_widget_to_setting(ud->settings, widget);
     GhbValue *val = ghb_widget_value(widget);
     subtitle_update_setting(ghb_value_xform(val, GHB_INT), "Offset", ud);
-
-    ghb_check_dependency(ud, widget, NULL);
 }
 
 G_MODULE_EXPORT void
 srt_codeset_changed_cb(GtkWidget *widget, signal_user_data_t *ud)
 {
     ghb_widget_to_setting(ud->settings, widget);
-    ghb_check_dependency(ud, widget, NULL);
-
     GhbValue *val = ghb_dict_get(ud->settings, "SrtCodeset");
     import_setting_update(ghb_value_dup(val), "Codeset", ud);
 }
@@ -999,8 +971,6 @@ G_MODULE_EXPORT void
 import_file_changed_cb(GtkWidget *widget, signal_user_data_t *ud)
 {
     ghb_widget_to_setting(ud->settings, widget);
-    ghb_check_dependency(ud, widget, NULL);
-
     GhbValue *val = ghb_dict_get(ud->settings, "ImportFile");
     import_setting_update(ghb_value_dup(val), "Filename", ud);
 
@@ -1026,8 +996,6 @@ G_MODULE_EXPORT void
 import_lang_changed_cb(GtkWidget *widget, signal_user_data_t *ud)
 {
     ghb_widget_to_setting(ud->settings, widget);
-    ghb_check_dependency(ud, widget, NULL);
-
     GhbValue *val = ghb_dict_get(ud->settings, "ImportLanguage");
     import_setting_update(ghb_value_dup(val), "Language", ud);
 }
@@ -1189,7 +1157,7 @@ subtitle_add_clicked_cb(GtkWidget *xwidget, signal_user_data_t *ud)
         GtkResponseType response;
         GtkWidget *dialog = GHB_WIDGET(ud->builder, "subtitle_dialog");
         gtk_window_set_title(GTK_WINDOW(dialog), _("Add Subtitles"));
-        response = gtk_dialog_run(GTK_DIALOG(dialog));
+        response = ghb_dialog_run(GTK_DIALOG(dialog));
         gtk_widget_hide(dialog);
         if (response != GTK_RESPONSE_OK)
         {
@@ -1243,7 +1211,7 @@ subtitle_add_fas_clicked_cb(GtkWidget *xwidget, signal_user_data_t *ud)
     GtkResponseType response;
     GtkWidget *dialog = GHB_WIDGET(ud->builder, "subtitle_dialog");
     gtk_window_set_title(GTK_WINDOW(dialog), _("Foreign Audio Scan"));
-    response = gtk_dialog_run(GTK_DIALOG(dialog));
+    response = ghb_dialog_run(GTK_DIALOG(dialog));
     gtk_widget_hide(dialog);
     if (response != GTK_RESPONSE_OK)
     {
@@ -1560,10 +1528,10 @@ subtitle_remove_lang_iter(GtkTreeModel *tm, GtkTreeIter *iter,
     {
         if (ghb_array_len(slang_list) > 0)
         {
-            const iso639_lang_t *lang;
+            const iso639_lang_t *lang_id;
             GhbValue *entry = ghb_array_get(slang_list, 0);
-            lang = ghb_iso639_lookup_by_int(ghb_lookup_lang(entry));
-            subtitle_update_pref_lang(ud, lang);
+            lang_id = ghb_iso639_lookup_by_int(ghb_lookup_lang(entry));
+            subtitle_update_pref_lang(ud, lang_id);
         }
         else
         {
@@ -1741,7 +1709,7 @@ subtitle_edit(GtkTreeView *tv, GtkTreePath *tp, signal_user_data_t *ud)
         GtkResponseType response;
         GtkWidget *dialog = GHB_WIDGET(ud->builder, "subtitle_dialog");
         gtk_window_set_title(GTK_WINDOW(dialog), _("Edit Subtitles"));
-        response = gtk_dialog_run(GTK_DIALOG(dialog));
+        response = ghb_dialog_run(GTK_DIALOG(dialog));
         gtk_widget_hide(dialog);
         if (response != GTK_RESPONSE_OK)
         {

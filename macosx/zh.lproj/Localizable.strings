@@ -77,6 +77,9 @@
 /* Preferences Advanced Toolbar Item */
 "Advanced" = "高级";
 
+/* Main Window -> Same as source destination open panel */
+"Allow" = "允许";
+
 /* HBLanguage -> Any language */
 "Any" = "任何";
 
@@ -97,6 +100,9 @@
 
 /* Job statistics */
 "Average speed:" = "平均速度：";
+
+/* Preferences -> Output Name Token */
+"Bit Depth" = "位深度";
 
 /* Copy Protection Alert -> second button
    Delete preset alert -> second button
@@ -121,6 +127,9 @@
 
 /* Main Window -> Destination open panel */
 "Choose" = "选择";
+
+/* Preferences -> Output Name Token */
+"Codec" = "编解码器";
 
 /* Queue Alert -> cancel rip first button */
 "Continue Encoding" = "继续编码";
@@ -175,6 +184,9 @@
 /* HBQueueItemView -> Encode state accessibility label */
 "Encode working" = "编码工作中";
 
+/* Preferences -> Output Name Token */
+"Encoder" = "编码器";
+
 /* No comment provided by engineer. */
 "Encoding %lu Jobs" = "编码 %lu 个任务";
 
@@ -205,6 +217,12 @@
 /* Preview -> live preview alert informative text */
 "HandBrake can't playback this combination of video/audio/container format. Do you want to open it in an external player?" = "HandBrake 无法播放这种视频/音频/容器格式的组合。您想在外部播放器中打开它吗？";
 
+/* Main Window -> Same as source destination open panel */
+"HandBrake does not have permission to write to this folder. To allow HandBrake to write to this folder, click \"Allow\"" = "HandBrake 没有写入此文件夹的权限。要允许 HandBrake 写入此文件夹，请单击“允许”";
+
+/* Preferences -> Output Name Token */
+"Height" = "高度";
+
 /* Quit Alert -> informative text */
 "If you quit HandBrake your current encode will be reloaded into your queue at next launch. Do you want to quit anyway?" = "如果您退出 HandBrake，您当前的编码将在下一次启动时重新加载到你的队列中。真的想要退出吗?";
 
@@ -223,6 +241,12 @@
 
 /* Touch bar */
 "Live Preview" = "实时预览";
+
+/* Preferences -> Output Name Token */
+"Modification-Date" = "修改日期";
+
+/* Preferences -> Output Name Token */
+"Modification-Time" = "修改时间";
 
 /* Queue undo action name */
 "Move Job in Queue" = "在队列中移动任务";
@@ -300,6 +324,9 @@
    Queue Done Alert -> sleep second button */
 "Preferences…" = "偏好设置…";
 
+/* Preferences -> Output Name Token */
+"Preset" = "预设";
+
 /* Preview -> progress formatter title */
 "preview" = "预览";
 
@@ -318,6 +345,9 @@
 /* Queue done alert message
    Queue notification alert message */
 "Put down that cocktail…" = "放下那杯鸡尾酒…";
+
+/* Preferences -> Output Name Token */
+"Quality Type" = "质量类型";
 
 /* Preferences -> Output Name Token */
 "Quality/Bitrate" = "质量/码率";
@@ -484,6 +514,9 @@
 
 /* Invalid destination alert -> message */
 "Warning!" = "警告！";
+
+/* Preferences -> Output Name Token */
+"Width" = "宽度";
 
 /* No comment provided by engineer. */
 "Working" = "工作中";

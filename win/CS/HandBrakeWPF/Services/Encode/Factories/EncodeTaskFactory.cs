@@ -96,12 +96,21 @@ namespace HandBrakeWPF.Services.Encode.Factories
                     break;
             }
 
+            bool nvdec = this.userSettingService.GetUserSetting<bool>(UserSettingConstants.EnableNvDecSupport);
+
+            int hwDecode = 0;
+            if (nvdec)
+            {
+                hwDecode = (int)NativeConstants.HB_DECODE_SUPPORT_NVDEC;
+            }
+
             Source source = new Source
             {
                 Title = job.Title,
                 Range = range,
                 Angle = job.Angle,
                 Path = job.Source,
+                HWDecode = hwDecode
             };
             return source;
         }
@@ -111,10 +120,10 @@ namespace HandBrakeWPF.Services.Encode.Factories
             Destination destination = new Destination
             {
                 File = job.Destination,
-                Mp4Options = new Mp4Options
+                Options = new Options
                 {
                     IpodAtom = job.VideoEncoder.IsH264 ? job.IPod5GSupport : false,
-                    Mp4Optimize = job.OptimizeMP4
+                    Optimize = job.Optimize
                 },
                 ChapterMarkers = job.IncludeChapterMarkers,
                 AlignAVStart = job.AlignAVStart,

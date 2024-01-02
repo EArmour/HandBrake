@@ -1,6 +1,6 @@
 /* dectx3gsub.c
 
-   Copyright (c) 2003-2022 HandBrake Team
+   Copyright (c) 2003-2023 HandBrake Team
    This file is part of the HandBrake source code
    Homepage: <http://handbrake.fr/>.
    It may be used under the terms of the GNU General Public License v2.
@@ -79,6 +79,7 @@ static int write_ssa_markup(char *dst, StyleRecord *style)
 
 static hb_buffer_t *tx3g_decode_to_ssa(hb_work_private_t *pv, hb_buffer_t *in)
 {
+    hb_buffer_t *out = NULL;
     uint8_t *pos = in->data;
     uint8_t *end = in->data + in->size;
 
@@ -130,7 +131,13 @@ static hb_buffer_t *tx3g_decode_to_ssa(hb_work_private_t *pv, hb_buffer_t *in)
 
             numStyleRecords = READ_U16();
             if (numStyleRecords > 0)
+            {
                 styleRecords = calloc(numStyleRecords, sizeof(StyleRecord));
+                if (styleRecords == NULL)
+                {
+                    goto fail;
+                }
+            }
 
             int i;
             for (i = 0; i < numStyleRecords; i++)
@@ -154,7 +161,7 @@ static hb_buffer_t *tx3g_decode_to_ssa(hb_work_private_t *pv, hb_buffer_t *in)
      * Copy text to output buffer, and add HTML markup for the style records
      */
     int maxOutputSize = textLength + SSA_PREAMBLE_LEN + (numStyleRecords * MAX_MARKUP_LEN);
-    hb_buffer_t *out = hb_buffer_init( maxOutputSize );
+    out = hb_buffer_init( maxOutputSize );
     if ( out == NULL )
         goto fail;
     uint8_t *dst = out->data;
