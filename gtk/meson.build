@@ -1,17 +1,15 @@
+# Copyright (C) 2023-2024 HandBrake Team
 # SPDX-License-Identifier: GPL-2.0-or-later
-# Copyright (c) 2023 HandBrake Team
 
 project('handbrake-gtk', 'c', 'cpp',
-  version: run_command('data/version.sh', check: true).stdout().strip(),
+  version: run_command('data/version.py', check: true).stdout().strip(),
   license: 'GPL-2.0-only',
   meson_version: '>= 0.51.0',
-  default_options: ['warning_level=1', 'buildtype=release'])
+  default_options: ['warning_level=2', 'buildtype=release'])
 
 # Minimum versions for dependencies
-glib_min = '>= 2.56'
-gtk4_min = '>= 4.4'
-gtk3_min = '>= 3.22'
-gst_min  = '>= 1.10'
+glib_min = '>= 2.68'
+gtk_min  = '>= 4.4'
 
 cc = meson.get_compiler('c')
 i18n = import('i18n')
@@ -22,24 +20,19 @@ if hb_dir == ''
   hb_dir = meson.current_build_dir() / '..'
 endif
 
-hb_libdirs = [hb_dir / 'libhb', hb_dir / 'contrib/lib'] + get_option('extra-libdirs')
 hb_incdirs = include_directories(hb_dir / 'libhb', hb_dir / 'contrib/include')
 
 # External dependencies (required)
 ghb_deps = [
-  cc.find_library('handbrake', dirs: hb_libdirs),
-  cc.find_library('bz2', dirs: hb_libdirs),
-  cc.find_library('m', required: false),
-  cc.find_library('mp3lame', dirs: hb_libdirs),
+  cc.find_library('handbrake', dirs: hb_dir / 'libhb'),
   dependency('dvdnav'),
   dependency('dvdread'),
-  dependency('dav1d'),
   dependency('SvtAv1Enc'),
-  dependency('fribidi'),
   dependency('glib-2.0', version: glib_min),
   dependency('gio-2.0', version: glib_min),
   dependency('gthread-2.0', version: glib_min),
   dependency('gmodule-2.0', version: glib_min),
+  dependency('gtk4', version: gtk_min),
   dependency('jansson'),
   dependency('libass'),
   dependency('libavcodec'),
@@ -47,44 +40,18 @@ ghb_deps = [
   dependency('libavformat'),
   dependency('libavutil'),
   dependency('libbluray'),
-  dependency('liblzma'),
-  dependency('libpostproc'),
   dependency('libswresample'),
   dependency('libswscale'),
+  dependency('libturbojpeg'),
   dependency('libxml-2.0'),
   dependency('ogg'),
-  dependency('opus'),
-  dependency('speex'),
   dependency('theoradec'),
   dependency('theoraenc'),
   dependency('threads'),
-  dependency('libturbojpeg'),
   dependency('vorbis'),
   dependency('vorbisenc'),
-  dependency('vpx'),
   dependency('x264'),
-  dependency('zimg'),
-  dependency('zlib'),
 ]
-
-if get_option('gtk4')
-  ghb_deps += dependency('gtk4', version: gtk4_min)
-else
-  ghb_deps += dependency('gtk+-3.0', version: gtk3_min)
-endif
-
-if get_option('gstreamer').enabled()
-  gst = dependency('gstreamer-1.0', version: gst_min, required: false)
-  gst_audio = dependency('gstreamer-audio-1.0', required: false)
-  gst_video = dependency('gstreamer-video-1.0', required: false)
-  gst_pbutils = dependency('gstreamer-pbutils-1.0', required: false)
-  if gst_pbutils.found()
-    ghb_deps += [gst, gst_audio, gst_video, gst_pbutils]
-    add_project_arguments('-D_ENABLE_GST', language: 'c')
-  else
-    message('Preview support disabled as gstreamer-plugins-base was not found.')
-  endif
-endif
 
 if get_option('libdovi').enabled()
   ghb_deps += dependency('dovi')
@@ -95,11 +62,7 @@ if get_option('fdk-aac').enabled()
 endif
 
 if get_option('qsv').enabled()
-  if host_machine.system() == 'windows'
-    ghb_deps += cc.find_library('vpl', dirs: hb_libdirs)
-  else
-    ghb_deps += [dependency('vpl'), dependency('libva'), dependency('libva-drm')]
-  endif
+  ghb_deps += dependency('vpl')
 endif
 
 if get_option('x265').enabled()
@@ -130,7 +93,7 @@ elif not cc.has_function('dlopen')
 endif
 
 if not cc.has_function('iconv')
-  ghb_deps += cc.find_library('iconv', dirs: get_option('extra-libdirs'))
+  ghb_deps += cc.find_library('iconv')
   add_project_arguments('-DLIBICONV_PLUG', language: ['c', 'cpp'])
 endif
 
@@ -138,9 +101,39 @@ if not get_option('c_std').contains('gnu')
   add_project_arguments('-D_DEFAULT_SOURCE', language: ['c', 'cpp'])
 endif
 
+if (cc.has_function('strerror_r'))
+  add_project_arguments('-DHAS_STRERROR_R', language: 'c')
+endif
+
+add_project_arguments('-DGDK_VERSION_MIN_REQUIRED=GDK_VERSION_4_4',
+'-DGDK_VERSION_MAX_ALLOWED=GDK_VERSION_4_4', language: 'c')
+
+compile_args = cc.get_supported_arguments(
+  '-Wno-missing-field-initializers',
+  '-Wno-sign-compare',
+  '-Wno-unused-parameter',
+  '-Wignored-qualifiers',
+  '-Wimplicit-function-declaration',
+  '-Wincompatible-pointer-types',
+  '-Wint-conversion',
+  '-Wint-to-pointer-cast',
+  '-Wlogical-op',
+  '-Wmissing-format-attribute',
+  '-Wmissing-noreturn',
+  '-Wmissing-include-dirs',
+  '-Wnested-externs',
+  '-Wold-style-definition',
+  '-Woverflow',
+  '-Wpointer-to-int-cast',
+  '-Wshadow',
+  '-Wstrict-prototypes',
+  '-Wunused',
+  '-Wwrite-strings')
+
+add_project_arguments(compile_args, language: 'c')
+
 link_args = cc.get_supported_link_arguments(
   '-Wl,--export-dynamic', '-Wl,--exclude-libs,ALL')
-
 add_project_link_arguments(link_args, language: ['c', 'cpp'])
 
 subdir('po')

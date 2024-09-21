@@ -491,7 +491,8 @@ Bitte die Webseite auf Versionshinweise prüfen.</value>
     <value>Warteschlange angehalten</value>
   </data>
   <data name="QueueViewModel_DelSelectedJobConfirmation" xml:space="preserve">
-    <value>Sollen die ausgewählten Aufgaben wirklich gelöscht werden?</value>
+    <value>Soll die ausgewählte Aufgabe wirklich gelöscht werden?
+Mit diesem Vorgang werden keine encodierten Dateien gelöscht.</value>
   </data>
   <data name="QueueViewModel_JobCurrentlyRunningWarning" xml:space="preserve">
     <value>Diese Encodierung ist momentan in Arbeit. Wenn sie gelöscht wird, wird die Encodierung abgebrochen. Soll wirklich fortgefahren werden?</value>
@@ -2135,15 +2136,11 @@ Falls unterstützt, wird jede benutzerdefinierte Voreinstellung übernommen. </v
   <data name="OptionsView_RemotePortLimit" xml:space="preserve">
     <value>Der Bereich der Ports muss zwischen 5000 und 32767 liegen.</value>
   </data>
-  <data name="OptionsView_SendFileToArgPlaceholders" xml:space="preserve">
-    <value>Austausch-Platzhalter: {source} {destination} {exit_code}</value>
-    <comment>Note: {source}, {destination} and {exit_code} are not translatable. </comment>
-  </data>
   <data name="SourceSelection_UpdateAvailable" xml:space="preserve">
     <value>Eine neue Version ist verfügbar!</value>
   </data>
   <data name="About_Copyright" xml:space="preserve">
-    <value>Copyright (C) 2003-2023 The HandBrake Team</value>
+    <value>Copyright (C) 2003-2024 The HandBrake Team</value>
   </data>
   <data name="Options_LowBatteryLevel" xml:space="preserve">
     <value>Geringe Batteriekapazität:</value>
@@ -2397,7 +2394,7 @@ Bitte eine andere Voreinstellung auswählen.</value>
     <value>Unbekannter Status. Siehe Protokoll für Details.</value>
   </data>
   <data name="QueueView_JobStatus_ReadError" xml:space="preserve">
-    <value>Beim Versuch, die Quelle zu lesen, wurden Fehler entdeckt.</value>
+    <value>Es wurden Fehler während des Einlesens der Quelle festgestellt.</value>
   </data>
   <data name="QueueView_JobStatus_Unknown" xml:space="preserve">
     <value>Unbekannter Fehler. Siehe Protokoll für Details.</value>
@@ -2800,5 +2797,56 @@ Um mehrere gleichzeitige Encodierungen zu ermöglichen, aktivieren Sie die "Proz
   <data name="Options_RecursiveFolderScan" xml:space="preserve">
     <value>Beim Hinzufügen von Ordnern rekursives Einlesen aktivieren.
 (Nur aktiv bei "Quellenauswahl" -&gt; "Ordner (Stapelverarbeitung)"</value>
+  </data>
+  <data name="AudioView_AudioQuality" xml:space="preserve">
+    <value>Qualität Tonspur</value>
+  </data>
+  <data name="AudioView_AudioTrackName" xml:space="preserve">
+    <value>Name Tonspur</value>
+  </data>
+  <data name="AudioView_BitrateSelection" xml:space="preserve">
+    <value>Bitrate Tonspur</value>
+  </data>
+  <data name="AudioView_DeleteTrack" xml:space="preserve">
+    <value>Diese Tonspur löschen</value>
+  </data>
+  <data name="AudioView_QualityMode" xml:space="preserve">
+    <value>Qualitätsmodus Audioencoder</value>
+  </data>
+  <data name="QueueView_AdvancedQueueDisplay" xml:space="preserve">
+    <value>Erweiterte Anzeige der Warteschlange</value>
+  </data>
+  <data name="QueueView_SimpleQueueDisplay" xml:space="preserve">
+    <value>Einfache Anzeige der Warteschlange</value>
+  </data>
+  <data name="VideoView_LosslessEncodeOnly" xml:space="preserve">
+    <value>Nur verlustfreie Encodierung.</value>
+  </data>
+  <data name="MainView_HideClassicMenu" xml:space="preserve">
+    <value>Menüleiste ausblenden</value>
+  </data>
+  <data name="MainView_ShowClassicMenu" xml:space="preserve">
+    <value>Menüleiste einblenden</value>
+  </data>
+  <data name="OptionsViewVideo_UnsupportedIntelDriver" xml:space="preserve">
+    <value>(Achtung: Nicht unterstützter Treiber! - Aktualisierung empfohlen)</value>
+  </data>
+  <data name="QueueSelectionView_RangeLimits" xml:space="preserve">
+    <value>Bereichsgrenzen:</value>
+  </data>
+  <data name="QueueSelectionView_RangeLimitsDesc" xml:space="preserve">
+    <value>Begrenzt die Länge der Titel, die der Warteschlange hinzugefügt werden.</value>
+  </data>
+  <data name="QueueSelectionView_RangeLimitsEnable" xml:space="preserve">
+    <value>Bereichsgrenzen aktivieren</value>
+  </data>
+  <data name="AddToQueue_RangeLimitError" xml:space="preserve">
+    <value>Einige Titel konnten nicht in die Warteschlange aufgenommen werden, da sie außerhalb der gewählten Bereichsgrenzen lagen.</value>
+  </data>
+  <data name="QueueView_StartAtTime" xml:space="preserve">
+    <value>Später starten</value>
+  </data>
+  <data name="QueueView_QueueStartTime" xml:space="preserve">
+    <value>Startzeit der Warteschlange:</value>
   </data>
 </root>

@@ -40,7 +40,7 @@ namespace HandBrakeWPF.Services.Encode.Model
             this.SubtitleTracks = new ObservableCollection<SubtitleTrack>();
             this.ChapterNames = new ObservableCollection<ChapterMarker>();
             this.AudioPassthruOptions = new ObservableCollection<HBAudioEncoder>();
-            this.MetaData = new MetaData();
+            this.MetaData = new ObservableCollection<MetaDataValue>();
             this.Padding = new PaddingFilter();
             this.VideoTunes = new List<VideoTune>();
         }
@@ -51,6 +51,7 @@ namespace HandBrakeWPF.Services.Encode.Model
             this.Source = task.Source;
             this.StartPoint = task.StartPoint;
             this.Title = task.Title;
+            this.KeepDuplicateTitles = task.KeepDuplicateTitles;
             this.Angle = task.Angle;
             this.EndPoint = task.EndPoint;
             this.PointToPointMode = task.PointToPointMode;
@@ -152,7 +153,8 @@ namespace HandBrakeWPF.Services.Encode.Model
             this.AlignAVStart = task.AlignAVStart;
 
             /* Other */
-            this.MetaData = new MetaData(task.MetaData);
+            this.PassthruMetadataEnabled = task.PassthruMetadataEnabled;
+            this.MetaData = new ObservableCollection<MetaDataValue>(task.MetaData);
         }
 
         /* Source */
@@ -160,6 +162,8 @@ namespace HandBrakeWPF.Services.Encode.Model
         public string Source { get; set; }
 
         public int Title { get; set; }
+
+        public bool KeepDuplicateTitles { get; set; }
 
         public int Angle { get; set; }
 
@@ -317,8 +321,8 @@ namespace HandBrakeWPF.Services.Encode.Model
 
 
         /* Metadata */
-        
-        public MetaData MetaData { get; set; }
+        public bool PassthruMetadataEnabled { get; set; }
+        public ObservableCollection<MetaDataValue> MetaData { get; set; }
 
         /* Previews */
 

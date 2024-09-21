@@ -1,6 +1,6 @@
 /* notifications.c
  *
- * Copyright (C) HandBrake Team 2023
+ * Copyright (C) 2023-2024 HandBrake Team
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -13,13 +13,14 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
+ * along with this program. If not, see <https://www.gnu.org/licenses/>.
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
 #include "notifications.h"
-#include <glib/gi18n.h>
+
+#include "application.h"
 
 static int n_succeeded = 0;
 static int n_failed = 0;
@@ -44,7 +45,7 @@ item_complete_name (const char *filename)
 }
 
 static char *
-queue_complete_message (int n_succeeded, int n_failed)
+queue_complete_message (void)
 {
     char *msg;
 
@@ -104,7 +105,7 @@ notify_done (gboolean final, gboolean success, gint idx, signal_user_data_t *ud)
         {
             title = g_strdup(_("Put down that cocktail…"));
         }
-        body = queue_complete_message(n_succeeded, n_failed);
+        body = queue_complete_message();
     }
     else if (notify_item && !final)
     {
@@ -127,8 +128,11 @@ notify_paused (GhbNotification type, int value, signal_user_data_t *ud)
     g_autofree char *body = NULL;
     int gigabyte, decimal;
 
-    if (!ud->when_complete && !ghb_dict_get_bool(ud->prefs, "NotifyOnEncodeDone"))
+    if (!ghb_get_queue_done_action() &&
+        !ghb_dict_get_bool(ud->prefs, "NotifyOnEncodeDone"))
+    {
         return;
+    }
 
     switch (type)
     {

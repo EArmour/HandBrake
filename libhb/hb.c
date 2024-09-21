@@ -1,6 +1,6 @@
 /* hb.c
 
-   Copyright (c) 2003-2023 HandBrake Team
+   Copyright (c) 2003-2024 HandBrake Team
    This file is part of the HandBrake source code
    Homepage: <http://handbrake.fr/>.
    It may be used under the terms of the GNU General Public License v2.
@@ -311,7 +311,7 @@ int hb_get_build( hb_handle_t * h )
 void hb_remove_previews( hb_handle_t * h )
 {
     char          * filename;
-    char          * dirname;
+    const char    * dirname;
     hb_title_t    * title;
     int             i, count, len;
     DIR           * dir;
@@ -321,7 +321,6 @@ void hb_remove_previews( hb_handle_t * h )
     dir = opendir( dirname );
     if (dir == NULL)
     {
-        free(dirname);
         return;
     }
 
@@ -351,22 +350,7 @@ void hb_remove_previews( hb_handle_t * h )
             free(filename);
         }
     }
-    free(dirname);
     closedir( dir );
-}
-
-void hb_scan( hb_handle_t * h, const char * path, int title_index,
-              int preview_count, int store_previews, uint64_t min_duration,
-              int crop_threshold_frames, int crop_threshold_pixels,
-              hb_list_t * exclude_extensions, int hw_decode)
-{
-    // TODO: Compatibility later for the other UI's.  Remove when they are updated.
-    hb_list_t *file_paths = hb_list_init();
-    hb_list_add(file_paths, (char *)path);
-
-    hb_scan_list(h, file_paths, title_index, preview_count, store_previews, min_duration, crop_threshold_frames, crop_threshold_pixels, exclude_extensions, hw_decode);
-
-    hb_list_close(&file_paths);
 }
 
 /**
@@ -381,11 +365,12 @@ void hb_scan( hb_handle_t * h, const char * path, int title_index,
  * @param crop_threshold_pixels The variance in pixels detected that are allowed for.
  * @param exclude_extensions A list of extensions to exclude for this scan.
  * @param hw_decode  The preferred hardware decoder to use..
+ * @param keep_duplicate_titles
  */
-void hb_scan_list( hb_handle_t * h, hb_list_t * paths, int title_index,
+void hb_scan( hb_handle_t * h, hb_list_t * paths, int title_index,
               int preview_count, int store_previews, uint64_t min_duration,
               int crop_threshold_frames, int crop_threshold_pixels,
-              hb_list_t * exclude_extensions, int hw_decode)
+              hb_list_t * exclude_extensions, int hw_decode, int keep_duplicate_titles)
 {
     hb_title_t * title;
 
@@ -473,7 +458,7 @@ void hb_scan_list( hb_handle_t * h, hb_list_t * paths, int title_index,
                                    &h->title_set, preview_count,
                                    store_previews, min_duration,
                                    crop_threshold_frames, crop_threshold_pixels,
-                                   exclude_extensions, hw_decode);
+                                   exclude_extensions, hw_decode, keep_duplicate_titles);
 }
 
 void hb_force_rescan( hb_handle_t * h )
@@ -917,8 +902,21 @@ hb_image_t * hb_get_preview3(hb_handle_t * h, int picture,
     }
     hb_dict_set_int(filter->settings, "width", scaled_width);
     hb_dict_set_int(filter->settings, "height", scaled_height);
-    hb_dict_set_string(filter->settings, "out_pix_fmt", av_get_pix_fmt_name(AV_PIX_FMT_RGB32));
     hb_list_add(job->list_filter, filter);
+
+    if (filter->init != NULL && filter->init(filter, &init))
+    {
+        hb_error("hb_get_preview3: Failure to initialize filter '%s'",
+                 filter->name);
+        hb_list_rem(list_filter, filter);
+        hb_filter_close(&filter);
+    }
+
+    filter = hb_filter_init(HB_FILTER_FORMAT);
+    filter->settings = hb_dict_init();
+    hb_dict_set_string(filter->settings, "format", av_get_pix_fmt_name(AV_PIX_FMT_RGB32));
+    hb_list_add(job->list_filter, filter);
+
     if (filter->init != NULL && filter->init(filter, &init))
     {
         hb_error("hb_get_preview3: Failure to initialize filter '%s'",
@@ -1903,7 +1901,7 @@ int hb_add( hb_handle_t * h, hb_job_t * job )
 
 void hb_job_setup_passes(hb_handle_t * h, hb_job_t * job, hb_list_t * list_pass)
 {
-    if (job->vquality > HB_INVALID_VIDEO_QUALITY)
+    if (job->vquality > HB_INVALID_VIDEO_QUALITY && ! hb_video_multipass_is_supported(job->vcodec, 1))
     {
         job->multipass = 0;
     }
@@ -2176,7 +2174,7 @@ int hb_global_init()
  */
 void hb_global_close()
 {
-    char          * dirname;
+    const char    * dirname;
     DIR           * dir;
     struct dirent * entry;
 
@@ -2202,7 +2200,6 @@ void hb_global_close()
         closedir( dir );
         rmdir( dirname );
     }
-    free(dirname);
 }
 
 /**
@@ -2214,7 +2211,7 @@ void hb_global_close()
 static void thread_func( void * _h )
 {
     hb_handle_t * h = (hb_handle_t *) _h;
-    char * dirname;
+    const char * dirname;
 
     h->pid = getpid();
 
@@ -2222,7 +2219,6 @@ static void thread_func( void * _h )
     dirname = hb_get_temporary_directory();
 
     hb_mkdir( dirname );
-    free(dirname);
 
     while( !h->die )
     {
@@ -2301,11 +2297,15 @@ static void redirect_thread_func(void * _data)
     if (pipe(pfd))
        return;
 #if defined( SYS_MINGW )
-    // dup2 doesn't work on windows for some stupid reason
-    stderr->_file = pfd[1];
+    // Non-console windows apps do not have a stderr->_file
+    // assigned properly
+    (void) freopen("NUL", "w", stderr);
+    _dup2(pfd[1], _fileno(stderr));
 #else
-    dup2(pfd[1], /*stderr*/ 2);
+    dup2(pfd[1], STDERR_FILENO);
 #endif
+    setvbuf(stderr, NULL, _IONBF, 0);
+
     FILE * log_f = fdopen(pfd[0], "rb");
 
     char line_buffer[500];

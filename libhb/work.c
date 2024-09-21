@@ -1,6 +1,6 @@
 /* work.c
 
-   Copyright (c) 2003-2023 HandBrake Team
+   Copyright (c) 2003-2024 HandBrake Team
    This file is part of the HandBrake source code
    Homepage: <http://handbrake.fr/>.
    It may be used under the terms of the GNU General Public License v2.
@@ -13,6 +13,7 @@
 #include "handbrake/decomb.h"
 #include "handbrake/hbavfilter.h"
 #include "handbrake/dovi_common.h"
+#include "handbrake/rpu.h"
 #include "handbrake/hwaccel.h"
 
 #if HB_PROJECT_FEATURE_QSV
@@ -99,6 +100,16 @@ static void SetWorkStateInfo(hb_job_t *job)
     hb_set_state( job->h, &state );
 }
 
+static void sanitize_multipass(hb_job_t *job)
+{
+    int bit_depth = hb_get_bit_depth(job->title->pix_fmt);
+    if (job->vcodec == HB_VCODEC_FFMPEG_FFV1 && bit_depth > 8)
+    {
+        hb_log("FFV1 2-pass is not supported for bit depth higher than 8, disabling");
+        job->multipass = 0;
+    }
+}
+
 /**
  * Iterates through job list and calls do_job for each job.
  * @param _work Handle work object.
@@ -154,6 +165,8 @@ static void work_func( void * _work )
         }
 #endif
 
+
+        sanitize_multipass(job);
         hb_job_setup_passes(job->h, job, passes);
         hb_job_close(&job);
 
@@ -336,7 +349,10 @@ hb_work_object_t* hb_video_encoder(hb_handle_t *h, int vcodec)
         case HB_VCODEC_SVT_AV1_10BIT:
             w = hb_get_work(h, WORK_ENCSVTAV1);
             break;
-
+        case HB_VCODEC_FFMPEG_FFV1:
+           w = hb_get_work(h, WORK_ENCAVCODEC);
+           w->codec_param = AV_CODEC_ID_FFV1;
+            break;
         default:
             hb_error("Unknown video codec (0x%x)", vcodec );
     }
@@ -398,14 +414,14 @@ void hb_display_job_info(hb_job_t *job)
 
         if (job->pts_to_stop)
         {
-            hb_log("   + title %d, start %02d:%02d:%02.2f stop %02d:%02d:%02.2f",
+            hb_log("   + title %d, start %02d:%02d:%05.2f stop %02d:%02d:%05.2f",
                    title->index,
                    hr_start, min_start, sec_start,
                    hr_stop,  min_stop,  sec_stop);
         }
         else
         {
-            hb_log("   + title %d, start %02d:%02d:%02.2f",
+            hb_log("   + title %d, start %02d:%02d:%05.2f",
                    title->index,
                    hr_start, min_start, sec_start);
         }
@@ -555,6 +571,8 @@ void hb_display_job_info(hb_job_t *job)
                 case HB_VCODEC_X265_16BIT:
                 case HB_VCODEC_SVT_AV1:
                 case HB_VCODEC_SVT_AV1_10BIT:
+                case HB_VCODEC_FFMPEG_VP9:
+                case HB_VCODEC_FFMPEG_VP9_10BIT:
                     hb_log("     + tune:    %s", job->encoder_tune);
                 default:
                     break;
@@ -661,6 +679,8 @@ void hb_display_job_info(hb_job_t *job)
 
         hb_log("     + color profile: %d-%d-%d",
                job->color_prim, job->color_transfer, job->color_matrix);
+        hb_log("     + color range: %s",
+                av_color_range_name(job->color_range));
         hb_log("     + chroma location: %s",
                av_chroma_location_name(job->chroma_location));
 
@@ -781,7 +801,7 @@ void hb_display_job_info(hb_job_t *job)
             if( audio->config.out.name )
                 hb_log( "   + name: %s", audio->config.out.name );
 
-            hb_log( "   + decoder: %s (track %d, id 0x%x)", audio->config.lang.description, audio->config.in.track + 1, audio->id );
+            hb_log( "   + decoder: %s (track %d, id 0x%x)", audio->config.lang.description, audio->config.index + 1, audio->id );
 
             if (audio->config.in.bitrate >= 1000)
                 hb_log("     + bitrate: %d kbps, samplerate: %d Hz",
@@ -1204,10 +1224,6 @@ static int sanitize_audio(hb_job_t *job)
             continue;
         }
 
-        /* Vorbis language information */
-        if (audio->config.out.codec == HB_ACODEC_VORBIS)
-            audio->priv.config.vorbis.language = audio->config.lang.simple;
-
         /* sense-check the requested samplerate */
         if (audio->config.out.samplerate <= 0)
         {
@@ -1483,32 +1499,16 @@ static void sanitize_filter_list_post(hb_job_t *job)
     }
 }
 
-static int dolby_vision_level(int width, int pps, int bitrate)
-{
-    for (int i = 0; hb_dolby_vision_levels[i].id != 0; i++)
-    {
-        if (pps <= hb_dolby_vision_levels[i].max_pps &&
-            width <= hb_dolby_vision_levels[i].max_width &&
-            bitrate <= (int)hb_dolby_vision_levels[i].max_bitrate_main_tier * 1024)
-        {
-            return hb_dolby_vision_levels[i].id;
-        }
-    }
-
-    hb_error("work: out of bound dolby vision level, using maximum");
-    return hb_dolby_vision_levels[12].id;
-}
-
 static void update_dolby_vision_level(hb_job_t *job)
 {
     // Dolby Vision has got its own definition of "level"
     // defined in section 2.2 of "Dolby Vision Profiles and Levels"
     // moreover, x265 requires vbv to be set, so do a rough guess here.
-    // Encoders can override it when needed.
+    // Encoders will override it when needed.
     int pps = (double)job->width * job->height * (job->vrate.num / job->vrate.den);
     int bitrate = job->vquality == HB_INVALID_VIDEO_QUALITY ? job->vbitrate : -1;
-
-    job->dovi.dv_level = dolby_vision_level(job->width, pps, bitrate);
+    int max_rate = hb_dovi_max_rate(job->vcodec, job->width, pps, bitrate, 0, 1);
+    job->dovi.dv_level = hb_dovi_level(job->width, pps, max_rate, 1);
 }
 
 static void sanitize_dynamic_hdr_metadata_passthru(hb_job_t *job)
@@ -1522,30 +1522,44 @@ static void sanitize_dynamic_hdr_metadata_passthru(hb_job_t *job)
         return;
     }
 
-    if (job->vcodec != HB_VCODEC_X265_10BIT &&
+    if (job->vcodec != HB_VCODEC_X265_10BIT    &&
+        job->vcodec != HB_VCODEC_VT_H265_10BIT &&
         job->vcodec != HB_VCODEC_SVT_AV1_10BIT)
     {
         job->passthru_dynamic_hdr_metadata &= ~HDR_10_PLUS;
     }
 
-#if HB_PROJECT_FEATURE_LIBDOVI
     if ((job->dovi.dv_profile != 5 &&
          job->dovi.dv_profile != 7 &&
-         job->dovi.dv_profile != 8) ||
-         job->vcodec != HB_VCODEC_X265_10BIT)
+         job->dovi.dv_profile != 8 &&
+         job->dovi.dv_profile != 10) ||
+        (job->vcodec != HB_VCODEC_X265_10BIT &&
+         job->vcodec != HB_VCODEC_VT_H265_10BIT &&
+         job->vcodec != HB_VCODEC_SVT_AV1_10BIT))
     {
         job->passthru_dynamic_hdr_metadata &= ~DOVI;
     }
 
+    if ((job->dovi.dv_profile == 8 || job->dovi.dv_profile == 10) &&
+        job->dovi.dv_bl_signal_compatibility_id == 1)
+    {
+        if (job->mastering.has_primaries == 0 && job->mastering.has_luminance == 0)
+        {
+            hb_log("work: missing mastering metadata, disabling Dolby Vision");
+            job->passthru_dynamic_hdr_metadata &= ~DOVI;
+        }
+    }
+
     if (job->passthru_dynamic_hdr_metadata & DOVI)
     {
+#if HB_PROJECT_FEATURE_LIBDOVI
         int mode = 0;
 
         if (job->dovi.dv_profile == 7 ||
             (job->dovi.dv_profile == 8 && job->dovi.dv_bl_signal_compatibility_id == 6))
         {
             // Convert to 8.1
-            mode |= 2;
+            mode |= RPU_MODE_CONVERT_TO_8_1;
 
             job->dovi.dv_profile = 8;
             job->dovi.el_present_flag = 0;
@@ -1556,7 +1570,22 @@ static void sanitize_dynamic_hdr_metadata_passthru(hb_job_t *job)
             hb_filter_find(list, HB_FILTER_PAD)        != NULL)
         {
             // Set the active area
-            mode |= 1;
+            mode |= RPU_MODE_UPDATE_ACTIVE_AREA;
+        }
+
+        // AV1 uses 10 for every Dolby Vision type
+        if (job->vcodec & HB_VCODEC_AV1_MASK)
+        {
+            mode |= RPU_MODE_EMIT_T35_OBU;
+            job->dovi.dv_profile = 10;
+        }
+        else
+        {
+            mode |= RPU_MODE_EMIT_UNSPECT_62_NAL;
+            if (job->dovi.dv_profile == 10)
+            {
+                job->dovi.dv_profile = job->dovi.dv_bl_signal_compatibility_id == 0 ? 5 : 8;
+            }
         }
 
         double scale_factor_x = 1, scale_factor_y = 1;
@@ -1603,10 +1632,11 @@ static void sanitize_dynamic_hdr_metadata_passthru(hb_job_t *job)
                                           pad_top, pad_bottom, pad_left, pad_right);
         hb_add_filter(job, filter, settings);
         free(settings);
-    }
 #else
-    job->passthru_dynamic_hdr_metadata &= ~DOVI;
+        hb_log("work: libdovi not available, disabling Dolby Vision");
+        job->passthru_dynamic_hdr_metadata &= ~DOVI;
 #endif
+    }
 }
 
 /**
@@ -1659,13 +1689,14 @@ static void do_job(hb_job_t *job)
 
     // Allow the usage of the hardware decoder
     // only if it was marked as supported in the scan
-    // TODO: remove the ifdef after WinUI is updated
-#ifdef __APPLE__
     if ((title->video_decode_support & job->hw_decode) == 0)
     {
         job->hw_decode = 0;
     }
-#endif
+    if (job->hw_decode == HB_DECODE_SUPPORT_MF)
+    {
+        job->hw_decode |= HB_DECODE_SUPPORT_FORCE_HW;
+    }
 
     // This must be performed before initializing filters because
     // it can add the subtitle render filter.
@@ -1712,7 +1743,8 @@ static void do_job(hb_job_t *job)
         // Dolby Vision profile 5 requires full range
         // TODO: find a better way to handle this
         init.color_range = job->passthru_dynamic_hdr_metadata & DOVI &&
-                            job->dovi.dv_profile == 5 ?
+                            (job->dovi.dv_profile == 5 ||
+                             (job->dovi.dv_profile == 10 && job->dovi.dv_bl_signal_compatibility_id == 0)) ?
                             title->color_range : AVCOL_RANGE_MPEG;
 #if HB_PROJECT_FEATURE_QSV
         if (hb_qsv_full_path_is_enabled(job))
@@ -1804,9 +1836,12 @@ static void do_job(hb_job_t *job)
     hb_reduce(&job->vrate.num, &job->vrate.den,
                job->vrate.num,  job->vrate.den);
 
-    // Dolby Vision level needs to be updated now that
-    // the final width, height and frame rate is known
-    update_dolby_vision_level(job);
+    if (job->passthru_dynamic_hdr_metadata & DOVI)
+    {
+        // Dolby Vision level needs to be updated now that
+        // the final width, height and frame rate is known
+        update_dolby_vision_level(job);
+    }
 
     job->fifo_mpeg2  = hb_fifo_init( FIFO_SMALL, FIFO_SMALL_WAKE );
     job->fifo_raw    = hb_fifo_init( FIFO_SMALL, FIFO_SMALL_WAKE );
@@ -1849,9 +1884,10 @@ static void do_job(hb_job_t *job)
                 *job->die = 1;
                 goto cleanup;
             }
+            w->init_delay = &audio->priv.init_delay;
+            w->extradata  = &audio->priv.extradata;
             w->fifo_in  = audio->priv.fifo_in;
             w->fifo_out = audio->priv.fifo_raw;
-            w->config   = &audio->priv.config;
             w->audio    = audio;
             w->codec_param = audio->config.in.codec_param;
 
@@ -1936,9 +1972,10 @@ static void do_job(hb_job_t *job)
                     *job->die = 1;
                     goto cleanup;
                 }
+                w->init_delay = &audio->priv.init_delay;
+                w->extradata  = &audio->priv.extradata;
                 w->fifo_in  = audio->priv.fifo_sync;
                 w->fifo_out = audio->priv.fifo_out;
-                w->config   = &audio->priv.config;
                 w->audio    = audio;
 
                 hb_list_add( job->list_work, w );
@@ -1983,8 +2020,10 @@ static void do_job(hb_job_t *job)
         else
             w->fifo_in  = job->fifo_sync;
 
-        w->fifo_out = job->fifo_mpeg4;
-        w->config   = &job->config;
+        w->fifo_out  =  job->fifo_mpeg4;
+
+        w->init_delay = &job->init_delay;
+        w->extradata  = &job->extradata;
 
         hb_list_add( job->list_work, w );
 

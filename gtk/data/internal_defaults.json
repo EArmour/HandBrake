@@ -1,9 +1,4 @@
 {
-    "Globals": {
-        "SkipDiskFreeCheck": false,
-        "scan_source": "",
-        "volume": "New Video"
-    },
     "OneTimeInitialization": {
         "title": "none"
     },
@@ -74,7 +69,7 @@
         "CustomTmpEnable": false,
         "CustomTmpDir": "",
         "DiskFreeCheck": true,
-        "DiskFreeLimit": 2000,
+        "DiskFreeLimitGB": 2,
         "RemoveFinishedJobs": false,
         "SyncTitleSettings": true,
         "AutoScan": false,
@@ -84,11 +79,20 @@
         "PauseEncodingOnPowerSave": true,
         "PauseEncodingOnBatteryPower": false,
         "PauseEncodingOnLowBattery": false,
+        "RecursiveFolderScan": false,
         "LowBatteryLevel": 15,
         "allow_tweaks": false,
         "default_source": "/dev/dvd",
         "ExportDirectory": "",
         "destination_dir": "",
+        "ExcludedFileExtensions": [
+            "jpg",
+            "png",
+            "srt",
+            "ssa",
+            "ass",
+            "txt"
+        ],
         "hbfd": false,
         "hbfd_feature": false,
         "live_duration": 15,
@@ -97,10 +101,12 @@
         "use_dvdnav": true,
         "reduce_hd_preview": true,
         "MinTitleDuration": 10,
+        "NativeFileChooser": true,
         "preview_count": 10,
         "preview_show_crop": false,
         "preview_x": -1,
         "preview_y": -1,
+        "show_queue_sidebar": true,
         "UseM4v": false,
         "auto_name": true,
         "auto_name_template": "{source}",
@@ -114,7 +120,7 @@
         "SrtDir": "",
         "window_width": 1,
         "window_height": 1,
-        "preset_window_width": 1,
-        "preset_window_height": 1
+        "presets_window_width": 1,
+        "presets_window_height": 1
     }
 }

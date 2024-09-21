@@ -1,8 +1,3 @@
-option('extra-libdirs',
-       type: 'array',
-       value: [],
-       description: 'Extra directories to search for libraries')
-
 option('fdk-aac',
        type: 'feature',
        value: 'disabled',
@@ -12,16 +7,6 @@ option('flatpak',
        type: 'boolean',
        value: false,
        description: 'Enable Flatpak packaging')
-
-option('gstreamer',
-       type: 'feature',
-       value: 'disabled',
-       description: 'Disable gstreamer (live preview)')
-
-option('gtk4',
-       type: 'boolean',
-       value: false,
-       description: 'Enable building with GTK4')
 
 option('hb-dir',
        type: 'string',

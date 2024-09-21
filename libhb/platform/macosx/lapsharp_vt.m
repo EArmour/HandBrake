@@ -1,6 +1,6 @@
 /* lapsharp_vt.m
 
-   Copyright (c) 2003-2023 HandBrake Team
+   Copyright (c) 2003-2024 HandBrake Team
    This file is part of the HandBrake source code
    Homepage: <http://handbrake.fr/>.
    It may be used under the terms of the GNU General Public License v2.
@@ -144,6 +144,7 @@ static int lapsharp_vt_init(hb_filter_object_t *filter,
     pv->mtl = hb_metal_context_init(hb_lapsharp_vt_metallib_data,
                                     hb_lapsharp_vt_metallib_len,
                                     "lapsharp",
+                                    NULL,
                                     sizeof(lapsharp_plane_context_t),
                                     init->geometry.width, init->geometry.height,
                                     init->pix_fmt, init->color_range);

@@ -1,6 +1,6 @@
 /* internal.h
 
-   Copyright (c) 2003-2023 HandBrake Team
+   Copyright (c) 2003-2024 HandBrake Team
    This file is part of the HandBrake source code
    Homepage: <http://handbrake.fr/>.
    It may be used under the terms of the GNU General Public License v2.
@@ -207,6 +207,8 @@ void          hb_buffer_copy_side_data(hb_buffer_t *dst, const hb_buffer_t *src)
 
 void          hb_buffer_copy_props(hb_buffer_t *dst, const hb_buffer_t *src);
 
+int           hb_buffer_is_writable(const hb_buffer_t *buf);
+
 hb_fifo_t   * hb_fifo_init( int capacity, int thresh );
 void          hb_fifo_register_full_cond( hb_fifo_t * f, hb_cond_t * c );
 int           hb_fifo_size( hb_fifo_t * );
@@ -269,7 +271,7 @@ hb_thread_t * hb_scan_init( hb_handle_t *, volatile int * die,
                             hb_title_set_t * title_set, int preview_count,
                             int store_previews, uint64_t min_duration,
                             int crop_auto_switch_threshold, int crop_median_threshold,
-                            hb_list_t * exclude_extensions, int hw_decode);
+                            hb_list_t * exclude_extensions, int hw_decode, int keep_duplicate_titles);
 hb_thread_t * hb_work_init( hb_list_t * jobs,
                             volatile int * die, hb_error_code * error, hb_job_t ** job );
 void ReadLoop( void * _w );
@@ -338,7 +340,7 @@ int          hb_dvd_angle_count( hb_dvd_t * d );
 void         hb_dvd_set_angle( hb_dvd_t * d, int angle );
 int          hb_dvd_main_feature( hb_dvd_t * d, hb_list_t * list_title );
 
-hb_bd_t     * hb_bd_init( hb_handle_t *h, const char * path );
+hb_bd_t     * hb_bd_init( hb_handle_t *h, const char * path, int keep_duplicate_titles );
 int           hb_bd_title_count( hb_bd_t * d );
 hb_title_t  * hb_bd_title_scan( hb_bd_t * d, int t, uint64_t min_duration );
 int           hb_bd_start( hb_bd_t * d, hb_title_t *title );
@@ -378,52 +380,18 @@ void hb_stream_set_need_keyframe( hb_stream_t *stream, int need_keyframe );
 /***********************************************************************
  * Work objects
  **********************************************************************/
+
 #define HB_CONFIG_MAX_SIZE (2*8192)
-struct hb_esconfig_s
+
+struct hb_data_s
 {
-    int init_delay;
-
-    union
-    {
-
-    struct
-    {
-        uint8_t bytes[HB_CONFIG_MAX_SIZE];
-        int     length;
-    } mpeg4;
-
-	struct
-	{
-	    uint8_t  sps[HB_CONFIG_MAX_SIZE];
-	    int       sps_length;
-	    uint8_t  pps[HB_CONFIG_MAX_SIZE];
-	    int       pps_length;
-	} h264;
-
-    struct
-    {
-        uint8_t headers[HB_CONFIG_MAX_SIZE];
-        int     headers_length;
-    } h265;
-
-    struct
-    {
-        uint8_t headers[3][HB_CONFIG_MAX_SIZE];
-    } theora;
-
-    struct
-    {
-        uint8_t bytes[HB_CONFIG_MAX_SIZE];
-        int     length;
-    } extradata;
-
-    struct
-    {
-        uint8_t headers[3][HB_CONFIG_MAX_SIZE];
-        char *language;
-    } vorbis;
-    };
+    uint8_t *bytes;
+    size_t   size;
 };
+
+hb_data_t * hb_data_init(size_t size);
+void        hb_data_close(hb_data_t **);
+hb_data_t * hb_data_dup(const hb_data_t *src);
 
 enum
 {

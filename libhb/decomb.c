@@ -1,6 +1,6 @@
 /* decomb.c
 
-   Copyright (c) 2003-2023 HandBrake Team
+   Copyright (c) 2003-2024 HandBrake Team
    This file is part of the HandBrake source code
    Homepage: <http://handbrake.fr/>.
    It may be used under the terms of the GNU General Public License v2.
@@ -410,6 +410,10 @@ static int hb_decomb_init(hb_filter_object_t *filter,
             eedi2_thread_args->arg.taskset = &pv->eedi2_taskset;
             eedi2_thread_args->arg.segment = ii;
         }
+    }
+    if (pv->mode & MODE_DECOMB_BOB)
+    {
+        init->vrate.num *= 2;
     }
 
     pv->output = *init;

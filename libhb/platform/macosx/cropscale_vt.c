@@ -1,6 +1,6 @@
 /* cropscale_vt.c
 
-   Copyright (c) 2003-2023 HandBrake Team
+   Copyright (c) 2003-2024 HandBrake Team
    This file is part of the HandBrake source code
    Homepage: <http://handbrake.fr/>.
    It may be used under the terms of the GNU General Public License v2.
@@ -176,6 +176,15 @@ static int crop_scale_vt_init(hb_filter_object_t *filter,
     {
         hb_log("cropscale_vt: CVPixelBufferPoolCreate failed");
         return -1;
+    }
+
+    err = VTSessionSetProperty(pv->session,
+                               kVTPixelTransferPropertyKey_DownsamplingMode,
+                               kVTDownsamplingMode_Average);
+    if (err != noErr)
+    {
+        hb_log("cropscale_vt: kVTPixelTransferPropertyKey_DownsamplingMode failed");
+        return err;
     }
 
     init->crop[0] = top;

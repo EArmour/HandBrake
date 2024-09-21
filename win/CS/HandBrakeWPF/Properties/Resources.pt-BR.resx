@@ -490,7 +490,8 @@ Por favor, verifique as Notas de Versão no site.</value>
     <value>Fila Pausada</value>
   </data>
   <data name="QueueViewModel_DelSelectedJobConfirmation" xml:space="preserve">
-    <value>Tem certeza que quer excluir as tarefas selecionadas?</value>
+    <value>Tem certeza de que deseja excluir os trabalhos selecionados?
+Nenhum arquivo codificado será excluído com esta operação. </value>
   </data>
   <data name="QueueViewModel_JobCurrentlyRunningWarning" xml:space="preserve">
     <value>Esta conversão está em andamento. Se você deletar, ela será interrompida. Tem certeza que quer continuar?</value>
@@ -2132,15 +2133,11 @@ Onde suportado, quaisquer predefinições de usuário serão importadas.</value>
   <data name="OptionsView_RemotePortLimit" xml:space="preserve">
     <value>O intervalo de portas deve estar entre 5000 e 32767</value>
   </data>
-  <data name="OptionsView_SendFileToArgPlaceholders" xml:space="preserve">
-    <value>Marcadores de substituição: {source} {destination} {exit_code}</value>
-    <comment>Note: {source}, {destination} and {exit_code} are not translatable. </comment>
-  </data>
   <data name="SourceSelection_UpdateAvailable" xml:space="preserve">
     <value>Uma nova versão está disponível!</value>
   </data>
   <data name="About_Copyright" xml:space="preserve">
-    <value>Direitos Autorais (C) 2003-2023 Equipe HandBrake</value>
+    <value>Direitos Autorais (C) 2003-2024 Equipe HandBrake</value>
   </data>
   <data name="Options_LowBatteryLevel" xml:space="preserve">
     <value>Baixo nível de bateria:</value>
@@ -2795,5 +2792,56 @@ Para permitir várias codificações simultâneas, ative o "Isolamento do proces
   </data>
   <data name="Options_RecursiveFolderScan" xml:space="preserve">
     <value>Faça a varredura recursiva dos diretórios ao usar o modo de varredura de pastas.</value>
+  </data>
+  <data name="AudioView_AudioQuality" xml:space="preserve">
+    <value>Qualidade da trilha de áudio</value>
+  </data>
+  <data name="AudioView_AudioTrackName" xml:space="preserve">
+    <value>Nome da trilha de áudio</value>
+  </data>
+  <data name="AudioView_BitrateSelection" xml:space="preserve">
+    <value>Bitrate da trilha de áudio</value>
+  </data>
+  <data name="AudioView_DeleteTrack" xml:space="preserve">
+    <value>Excluir esta trilha de áudio</value>
+  </data>
+  <data name="AudioView_QualityMode" xml:space="preserve">
+    <value>Modo de qualidade do codificador de áudio</value>
+  </data>
+  <data name="QueueView_AdvancedQueueDisplay" xml:space="preserve">
+    <value>Usar a visualização avançada da fila</value>
+  </data>
+  <data name="QueueView_SimpleQueueDisplay" xml:space="preserve">
+    <value>Usar a visualização simplificada da fila</value>
+  </data>
+  <data name="VideoView_LosslessEncodeOnly" xml:space="preserve">
+    <value>Apenas codificação sem perdas.</value>
+  </data>
+  <data name="MainView_HideClassicMenu" xml:space="preserve">
+    <value>Hide Classic Menu</value>
+  </data>
+  <data name="MainView_ShowClassicMenu" xml:space="preserve">
+    <value>Show Classic Menu</value>
+  </data>
+  <data name="OptionsViewVideo_UnsupportedIntelDriver" xml:space="preserve">
+    <value>(Warning: Unsupported Driver Detected! - Update Recommended)</value>
+  </data>
+  <data name="QueueSelectionView_RangeLimits" xml:space="preserve">
+    <value>Range Limits:</value>
+  </data>
+  <data name="QueueSelectionView_RangeLimitsDesc" xml:space="preserve">
+    <value>Limit the length of the titles added to the queue.</value>
+  </data>
+  <data name="QueueSelectionView_RangeLimitsEnable" xml:space="preserve">
+    <value>Enable Range Limits</value>
+  </data>
+  <data name="AddToQueue_RangeLimitError" xml:space="preserve">
+    <value>Some titles could not be added to the queue due to being outside of the selected range limits.</value>
+  </data>
+  <data name="QueueView_StartAtTime" xml:space="preserve">
+    <value>Start Later</value>
+  </data>
+  <data name="QueueView_QueueStartTime" xml:space="preserve">
+    <value>Queue Start Time:</value>
   </data>
 </root>

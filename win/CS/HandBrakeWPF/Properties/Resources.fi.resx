@@ -118,7 +118,7 @@
     <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
   </resheader>
   <data name="Video_EncoderExtraArgs" xml:space="preserve">
-    <value>Koodausparametrien koko luettelo:
+    <value>Koko koodausparametriluettelo:
 {0}</value>
   </data>
   <data name="Video_x264FastDecode" xml:space="preserve">
@@ -489,7 +489,8 @@ Lisätietoa voi löytyä toimintalokista.</value>
     <value>Jono on keskeytetty</value>
   </data>
   <data name="QueueViewModel_DelSelectedJobConfirmation" xml:space="preserve">
-    <value>Haluatko varmasti poistaa valitut työt?</value>
+    <value>Haluatko varmasti poistaa valitut työt?
+Toiminto ei poista koodattuja tiedostoja.</value>
   </data>
   <data name="QueueViewModel_JobCurrentlyRunningWarning" xml:space="preserve">
     <value>Tämä koodaus on käynnissä. Jos poistat sen, koodaus pysäytetään. Haluatko varmasti jatkaa?</value>
@@ -1549,7 +1550,7 @@ VLC ja MPC-HC ovat tuettuja, muut toistimet voivat toimia, mutta sitä ei ole va
     <value>Aiempi jonoarkisto on käytettävissä.</value>
   </data>
   <data name="SourceSelection_SingleVideoFile" xml:space="preserve">
-    <value>Open video file(s).</value>
+    <value>Avaa videotiedosto(ja).</value>
   </data>
   <data name="SourceSelection_SourceSelection" xml:space="preserve">
     <value>Lähteen valinta</value>
@@ -1558,13 +1559,13 @@ VLC ja MPC-HC ovat tuettuja, muut toistimet voivat toimia, mutta sitä ei ole va
     <value>Kesto:</value>
   </data>
   <data name="StaticPreviewView_LivePreview" xml:space="preserve">
-    <value>Encode Preview</value>
+    <value>Koodausesikatselu</value>
   </data>
   <data name="StaticPreviewView_SelectPreviewImage" xml:space="preserve">
     <value>Valitse esikatselukuva</value>
   </data>
   <data name="StaticPreviewView_UseExternalPlayer" xml:space="preserve">
-    <value>Use External Player App</value>
+    <value>Käytä ulkoista toistosovellusta</value>
   </data>
   <data name="SubtitlesView_AddCC" xml:space="preserve">
     <value>Lisää dynaamiset tekstitykset, kun saatavilla</value>
@@ -1639,7 +1640,7 @@ VLC ja MPC-HC ovat tuettuja, muut toistimet voivat toimia, mutta sitä ei ole va
     <value>tallennustila</value>
   </data>
   <data name="VideoView_MultiPass" xml:space="preserve">
-    <value>Multi-Pass Encoding</value>
+    <value>Monivaiheinen koodaus</value>
   </data>
   <data name="VideoView_AverageBitrate" xml:space="preserve">
     <value>Keskim. bittinopeus (kbps):</value>
@@ -1702,7 +1703,7 @@ VLC ja MPC-HC ovat tuettuja, muut toistimet voivat toimia, mutta sitä ei ole va
     <value>Tietoa HandBrakestä</value>
   </data>
   <data name="SourceSelection_DropFileHere" xml:space="preserve">
-    <value>Or drop a file, set of files or folder here ...</value>
+    <value>Tai pudota tähän tiedosto tai tiedostoja…</value>
   </data>
   <data name="SourceSelection_Help" xml:space="preserve">
     <value>Ohje</value>
@@ -2133,15 +2134,11 @@ Sikäli kuin mahdollista, on tuotu käyttäjän esiasetukset.</value>
   <data name="OptionsView_RemotePortLimit" xml:space="preserve">
     <value>Porttialueen on oltava väliltä 5000–32767.</value>
   </data>
-  <data name="OptionsView_SendFileToArgPlaceholders" xml:space="preserve">
-    <value>Replacement Placeholders: {source} {destination} {exit_code}</value>
-    <comment>Note: {source}, {destination} and {exit_code} are not translatable. </comment>
-  </data>
   <data name="SourceSelection_UpdateAvailable" xml:space="preserve">
     <value>Saatavilla on uusi versio!</value>
   </data>
   <data name="About_Copyright" xml:space="preserve">
-    <value>Tekijänoikeudet © 2003–2023 HandBrake-työryhmä</value>
+    <value>Tekijänoikeudet © 2003–2004 HandBrake-työryhmä</value>
   </data>
   <data name="Options_LowBatteryLevel" xml:space="preserve">
     <value>Akkutehon ollessa vähissä:</value>
@@ -2395,7 +2392,7 @@ Valitse toinen esiasetus.</value>
     <value>Tuntematon tila. Katso lisätietoa lokista.</value>
   </data>
   <data name="QueueView_JobStatus_ReadError" xml:space="preserve">
-    <value>Havaittiin virheitä yritettäessä lukea lähdettä.</value>
+    <value>Yritettäessä lukea lähdettä havaittiin virheitä.</value>
   </data>
   <data name="QueueView_JobStatus_Unknown" xml:space="preserve">
     <value>Tuntematon ongelma. Katso lisätietoa lokista.</value>
@@ -2763,39 +2760,90 @@ Usean rinnakkaisen koodauksen voi ottaa käyttöön asetuksella ”Prosessien er
     <value>Sivusto:</value>
   </data>
   <data name="MainView_PresetClone" xml:space="preserve">
-    <value>Clone Preset</value>
+    <value>Monista esiasetus</value>
   </data>
   <data name="PresetPane_MoveDown" xml:space="preserve">
-    <value>Move Down</value>
+    <value>Siirrä alemmas</value>
   </data>
   <data name="PresetPane_MoveToBottom" xml:space="preserve">
-    <value>Move to Bottom</value>
+    <value>Siirrä alimmas</value>
   </data>
   <data name="PresetPane_MoveToTop" xml:space="preserve">
-    <value>Move to Top</value>
+    <value>Siirrä ylimmäs</value>
   </data>
   <data name="PresetPane_MoveUp" xml:space="preserve">
-    <value>Move Up</value>
+    <value>Siirrä ylemmäs</value>
   </data>
   <data name="QueueViewModel_StopButContinueJob" xml:space="preserve">
-    <value>There are currently jobs running. Would you like to complete the current jobs before stopping the queue?</value>
+    <value>Töitä on yhä käynnissä. Haluatko päättää nykyiset työt ennen jonon pysäyttämistä?</value>
   </data>
   <data name="Options_AddExt" xml:space="preserve">
-    <value>Add Extension</value>
+    <value>Lisää pääte</value>
   </data>
   <data name="Options_ExcludeExtensions" xml:space="preserve">
-    <value>Exclude File Extensions:</value>
+    <value>Sivuuta tiedostopäätteet:</value>
   </data>
   <data name="Options_ExcludeExtensionsInfo" xml:space="preserve">
-    <value>The following file extensions will be ignored when scanning a folder. The list is case insensitive. "." is not required.</value>
+    <value>Seuraavat tiedostopäätteet sivuutetaan kansiota tutkittaessa. Luettelo erottaa pien- ja suuraakkoset. ”.” ei ole tarpeen.</value>
   </data>
   <data name="Options_ExtensionExists" xml:space="preserve">
-    <value>This file extension already exists in the list.</value>
+    <value>Tämä pääte on jo luettelossa.</value>
   </data>
   <data name="Options_FileHandling" xml:space="preserve">
-    <value>File Handling (Scanning)</value>
+    <value>Tiedostojen käsittely (tutkitaan)</value>
   </data>
   <data name="Options_RecursiveFolderScan" xml:space="preserve">
-    <value>Recursively scan directories when using the folder scan mode.</value>
+    <value>Etsi kansiontutkimistilassa koko alikansiorakenteesta.</value>
+  </data>
+  <data name="AudioView_AudioQuality" xml:space="preserve">
+    <value>Ääniraidan laatu</value>
+  </data>
+  <data name="AudioView_AudioTrackName" xml:space="preserve">
+    <value>Ääniraidan nimi</value>
+  </data>
+  <data name="AudioView_BitrateSelection" xml:space="preserve">
+    <value>Ääniraidan bittinopeus</value>
+  </data>
+  <data name="AudioView_DeleteTrack" xml:space="preserve">
+    <value>Poista tämä ääniraita</value>
+  </data>
+  <data name="AudioView_QualityMode" xml:space="preserve">
+    <value>Äänikoodaimen laatutila</value>
+  </data>
+  <data name="QueueView_AdvancedQueueDisplay" xml:space="preserve">
+    <value>Käytä edistynyttä jononäkymää</value>
+  </data>
+  <data name="QueueView_SimpleQueueDisplay" xml:space="preserve">
+    <value>Käytä yksinkertaista jononäkymää</value>
+  </data>
+  <data name="VideoView_LosslessEncodeOnly" xml:space="preserve">
+    <value>Vain häviötön koodaus.</value>
+  </data>
+  <data name="MainView_HideClassicMenu" xml:space="preserve">
+    <value>Hide Classic Menu</value>
+  </data>
+  <data name="MainView_ShowClassicMenu" xml:space="preserve">
+    <value>Show Classic Menu</value>
+  </data>
+  <data name="OptionsViewVideo_UnsupportedIntelDriver" xml:space="preserve">
+    <value>(Warning: Unsupported Driver Detected! - Update Recommended)</value>
+  </data>
+  <data name="QueueSelectionView_RangeLimits" xml:space="preserve">
+    <value>Range Limits:</value>
+  </data>
+  <data name="QueueSelectionView_RangeLimitsDesc" xml:space="preserve">
+    <value>Limit the length of the titles added to the queue.</value>
+  </data>
+  <data name="QueueSelectionView_RangeLimitsEnable" xml:space="preserve">
+    <value>Enable Range Limits</value>
+  </data>
+  <data name="AddToQueue_RangeLimitError" xml:space="preserve">
+    <value>Some titles could not be added to the queue due to being outside of the selected range limits.</value>
+  </data>
+  <data name="QueueView_StartAtTime" xml:space="preserve">
+    <value>Start Later</value>
+  </data>
+  <data name="QueueView_QueueStartTime" xml:space="preserve">
+    <value>Queue Start Time:</value>
   </data>
 </root>

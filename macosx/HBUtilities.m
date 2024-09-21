@@ -36,15 +36,13 @@ HB_OBJC_DIRECT_MEMBERS
 
 + (NSURL *)appSupportURL
 {
-    NSFileManager *fileManager = [NSFileManager defaultManager];
+    NSFileManager *fileManager = NSFileManager.defaultManager;
     NSURL *appSupportURL = [[[fileManager URLsForDirectory:NSApplicationSupportDirectory inDomains:NSUserDomainMask]
-                             firstObject] URLByAppendingPathComponent:@"HandBrake"];
-
-    if (appSupportURL && ![fileManager fileExistsAtPath:appSupportURL.path])
+                             firstObject] URLByAppendingPathComponent:@"HandBrake" isDirectory:YES];
+    if (appSupportURL)
     {
-        [fileManager createDirectoryAtPath:appSupportURL.path withIntermediateDirectories:YES attributes:nil error:NULL];
+        [fileManager createDirectoryAtURL:appSupportURL withIntermediateDirectories:YES attributes:nil error:NULL];
     }
-
     return appSupportURL;
 }
 
@@ -343,6 +341,64 @@ HB_OBJC_DIRECT_MEMBERS
     }];
 
     return mutableFileURLs;
+}
+
++ (NSArray<NSString *> *)supportedExtensions
+{
+    return @[@"srt", @"ssa", @"ass"];
+}
+
++ (NSArray<NSURL *> *)extractURLs:(NSArray<NSURL *> *)fileURLs withExtension:(NSArray<NSString *> *)extensions
+{
+    NSMutableArray<NSURL *> *extractedFileURLs = [NSMutableArray array];
+
+    for (NSURL *fileURL in fileURLs)
+    {
+        BOOL isMatch = NO;
+        for (NSString *extension in extensions)
+        {
+            if ([fileURL.pathExtension caseInsensitiveCompare:extension] == NSOrderedSame)
+            {
+                isMatch = YES;
+                break;
+            }
+        }
+        if (isMatch)
+        {
+            [extractedFileURLs addObject:fileURL];
+        }
+    }
+
+    return extractedFileURLs;
+}
+
++ (NSArray<NSURL *> *)trimURLs:(NSArray<NSURL *> *)fileURLs withExtension:(NSArray<NSString *> *)excludedExtensions
+{
+    NSMutableArray<NSURL *> *trimmedURLs = [NSMutableArray array];
+
+    for (NSURL *fileURL in fileURLs)
+    {
+        BOOL excluded = NO;
+        NSString *extension = fileURL.pathExtension;
+
+        if (extension)
+        {
+            for (NSString *excludedExtension in excludedExtensions)
+            {
+                if ([extension caseInsensitiveCompare:excludedExtension] == NSOrderedSame)
+                {
+                    excluded = YES;
+                    break;
+                }
+            }
+        }
+
+        if (excluded == NO)
+        {
+            [trimmedURLs addObject:fileURL];
+        }
+    }
+    return trimmedURLs;
 }
 
 + (NSString *)isoCodeForNativeLang:(NSString *)language

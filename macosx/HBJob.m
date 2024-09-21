@@ -45,7 +45,7 @@ NSString *HBChaptersChangedNotification  = @"HBChaptersChangedNotification";
 
 @implementation HBJob
 
-- (nullable instancetype)initWithTitle:(HBTitle *)title preset:(HBPreset *)preset
+- (nullable instancetype)initWithTitle:(HBTitle *)title preset:(HBPreset *)preset subtitles:(NSArray<NSURL *> *)subtitlesURLs
 {
     self = [super init];
     if (self) {
@@ -54,6 +54,7 @@ NSString *HBChaptersChangedNotification  = @"HBChaptersChangedNotification";
 
         _title = title;
         _titleIdx = title.index;
+        _keepDuplicateTitles = title.keepDuplicateTitles;
         _stream = title.isStream;
 
         _name = [title.name copy];
@@ -74,12 +75,23 @@ NSString *HBChaptersChangedNotification  = @"HBChaptersChangedNotification";
         _metadataPassthru = YES;
         _presetName = @"";
 
+        for (NSURL *url in subtitlesURLs)
+        {
+            [self.subtitles addExternalSourceTrackFromURL:url addImmediately:NO];
+        }
+
         if ([self applyPreset:preset error:NULL] == NO)
         {
             return nil;
         }
     }
 
+    return self;
+}
+
+- (nullable instancetype)initWithTitle:(HBTitle *)title preset:(HBPreset *)preset
+{
+    self = [self initWithTitle:title preset:preset subtitles:@[]];
     return self;
 }
 
@@ -227,7 +239,7 @@ NSString *HBChaptersChangedNotification  = @"HBChaptersChangedNotification";
 
 - (NSURL *)destinationURL
 {
-    return [self.destinationFolderURL URLByAppendingPathComponent:self.destinationFileName];
+    return [self.destinationFolderURL URLByAppendingPathComponent:self.destinationFileName isDirectory:NO];
 }
 
 - (void)setContainer:(int)container
@@ -260,6 +272,7 @@ NSString *HBChaptersChangedNotification  = @"HBChaptersChangedNotification";
 {
     _title = title;
     self.range.title = title;
+    _keepDuplicateTitles = title.keepDuplicateTitles;
 }
 
 - (void)setOptimize:(BOOL)optimize
@@ -414,6 +427,7 @@ NSString *HBChaptersChangedNotification  = @"HBChaptersChangedNotification";
 
         copy->_metadataPassthru = _metadataPassthru;
         copy->_hwDecodeUsage = _hwDecodeUsage;
+        copy->_keepDuplicateTitles = _keepDuplicateTitles;
     }
 
     return copy;
@@ -479,6 +493,7 @@ NSString *HBChaptersChangedNotification  = @"HBChaptersChangedNotification";
 
     encodeBool(_metadataPassthru);
     encodeInteger(_hwDecodeUsage);
+    encodeBool(_keepDuplicateTitles);
 }
 
 - (instancetype)initWithCoder:(NSCoder *)decoder
@@ -524,6 +539,7 @@ NSString *HBChaptersChangedNotification  = @"HBChaptersChangedNotification";
 
         decodeBool(_metadataPassthru);
         decodeInteger(_hwDecodeUsage); if (_hwDecodeUsage != HBJobHardwareDecoderUsageNone && _hwDecodeUsage != HBJobHardwareDecoderUsageAlways && _hwDecodeUsage != HBJobHardwareDecoderUsageFullPathOnly) { goto fail; }
+        decodeBool(_keepDuplicateTitles);
 
         return self;
     }

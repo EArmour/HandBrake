@@ -1,6 +1,6 @@
 /* hbtypes.h
 
-   Copyright (c) 2003-2023 HandBrake Team
+   Copyright (c) 2003-2024 HandBrake Team
    This file is part of the HandBrake source code
    Homepage: <http://handbrake.fr/>.
    It may be used under the terms of the GNU General Public License v2.
@@ -35,7 +35,7 @@ typedef struct hb_attachment_s hb_attachment_t;
 typedef struct hb_metadata_s hb_metadata_t;
 typedef struct hb_coverart_s hb_coverart_t;
 typedef struct hb_state_s hb_state_t;
-typedef struct hb_esconfig_s     hb_esconfig_t;
+typedef struct hb_data_s hb_data_t;
 typedef struct hb_work_private_s hb_work_private_t;
 typedef struct hb_work_object_s  hb_work_object_t;
 typedef struct hb_filter_private_s hb_filter_private_t;

@@ -1,6 +1,6 @@
 /* decavcodec.c
 
-   Copyright (c) 2003-2020 HandBrake Team
+   Copyright (c) 2003-2024 HandBrake Team
    Copyright 2022 NVIDIA Corporation
    This file is part of the HandBrake source code
    Homepage: <http://handbrake.fr/>.
@@ -50,6 +50,7 @@
 #include "handbrake/hwaccel.h"
 #include "handbrake/lang.h"
 #include "handbrake/audio_resample.h"
+#include "handbrake/extradata.h"
 
 #if HB_PROJECT_FEATURE_QSV
 #include "libavutil/hwcontext_qsv.h"
@@ -597,6 +598,10 @@ static void closePrivData( hb_work_private_t ** ppv )
         }
         if ( pv->context )
         {
+            if (pv->context->hw_device_ctx)
+            {
+                av_buffer_unref(&pv->context->hw_device_ctx);
+            }
             hb_avcodec_free_context(&pv->context);
         }
         av_packet_free(&pv->pkt);
@@ -822,7 +827,8 @@ static int parse_adts_extradata( hb_audio_t * audio, AVCodecContext * context,
         return ret;
     }
 
-    if (audio->priv.config.extradata.length == 0)
+    if (audio->priv.extradata == NULL ||
+        (audio->priv.extradata && audio->priv.extradata->size == 0))
     {
         const uint8_t * extradata;
         size_t          size;
@@ -831,10 +837,7 @@ static int parse_adts_extradata( hb_audio_t * audio, AVCodecContext * context,
                                             &size);
         if (extradata != NULL && size > 0)
         {
-            int len;
-            len = MIN(size, HB_CONFIG_MAX_SIZE);
-            memcpy(audio->priv.config.extradata.bytes, extradata, len);
-            audio->priv.config.extradata.length = len;
+            hb_set_extradata(&audio->priv.extradata, extradata, size);
         }
     }
 
@@ -884,6 +887,10 @@ static int decavcodecaBSInfo( hb_work_object_t *w, const hb_buffer_t *buf,
     }
     else
     {
+        // AVCodecContext bit_rate default is 128 Kb
+        // unset it to avoid getting a wrong value if
+        // nothing sets it to the actual streams value
+        context->bit_rate = 1;
         parser = av_parser_init(codec->id);
     }
 
@@ -906,13 +913,16 @@ static int decavcodecaBSInfo( hb_work_object_t *w, const hb_buffer_t *buf,
     unsigned char *parse_buffer;
     int parse_pos, parse_buffer_size;
 
+    int avcodec_result = 0;
     while (buf != NULL && !done)
     {
         parse_pos = 0;
         while (parse_pos < buf->size && !done)
         {
-            int parse_len, ret;
+            int parse_len;
 
+            // Start with a clean error slate on each parsing iteration
+            avcodec_result = 0;
             if (parser != NULL)
             {
                 parse_len = av_parser_parse2(parser, context,
@@ -938,8 +948,12 @@ static int decavcodecaBSInfo( hb_work_object_t *w, const hb_buffer_t *buf,
             avp->pts  = buf->s.start;
             avp->dts  = AV_NOPTS_VALUE;
 
-            ret = avcodec_send_packet(context, avp);
-            if (ret < 0 && ret != AVERROR_EOF)
+            // Note: The first buffer returned by av_parser_parse2() may
+            // not be aligned to start of valid codec data which can cause
+            // the first call to avcodec_send_packet() to fail with
+            // AVERROR_INVALIDDATA.
+            avcodec_result = avcodec_send_packet(context, avp);
+            if (avcodec_result < 0 && avcodec_result != AVERROR_EOF)
             {
                 parse_pos += parse_len;
                 av_packet_free(&avp);
@@ -953,8 +967,8 @@ static int decavcodecaBSInfo( hb_work_object_t *w, const hb_buffer_t *buf,
                 {
                     frame = av_frame_alloc();
                 }
-                ret = avcodec_receive_frame(context, frame);
-                if (ret >= 0)
+                avcodec_result = avcodec_receive_frame(context, frame);
+                if (avcodec_result >= 0)
                 {
                     // libavcoded doesn't consistently set frame->sample_rate
                     if (frame->sample_rate != 0)
@@ -1019,7 +1033,31 @@ static int decavcodecaBSInfo( hb_work_object_t *w, const hb_buffer_t *buf,
                     }
                     else
                     {
-                        info->channel_layout = frame->ch_layout.u.mask;
+                        if (frame->ch_layout.order == AV_CHANNEL_ORDER_NATIVE)
+                        {
+                            info->channel_layout = frame->ch_layout.u.mask;
+                        }
+                        else if (frame->ch_layout.order == AV_CHANNEL_ORDER_CUSTOM)
+                        {
+                            AVChannelLayout channel_layout;
+                            av_channel_layout_copy(&channel_layout, &frame->ch_layout);
+                            int result = av_channel_layout_retype(&channel_layout,
+                                                                  AV_CHANNEL_ORDER_NATIVE,
+                                                                  0);
+                            if (result == 0)
+                            {
+                                info->channel_layout = channel_layout.u.mask;
+                            }
+                            else
+                            {
+                                hb_deep_log(2, "decavcodec: unsupported custom channel order");
+                            }
+                            av_channel_layout_uninit(&channel_layout);
+                        }
+                        else
+                        {
+                            hb_deep_log(2, "decavcodec: unsupported custom channel order");
+                        }
                     }
 
                     if (info->channel_layout == 0)
@@ -1057,7 +1095,7 @@ static int decavcodecaBSInfo( hb_work_object_t *w, const hb_buffer_t *buf,
                     av_frame_unref(frame);
                     break;
                 }
-            } while (ret >= 0);
+            } while (avcodec_result >= 0);
             av_packet_free(&avp);
             av_frame_free(&frame);
             parse_pos += parse_len;
@@ -1072,6 +1110,10 @@ static int decavcodecaBSInfo( hb_work_object_t *w, const hb_buffer_t *buf,
     if ( parser != NULL )
         av_parser_close( parser );
     hb_avcodec_free_context(&context);
+    if (!result && avcodec_result < 0 && avcodec_result != AVERROR_EOF)
+    {
+        result = avcodec_result;
+    }
     return result;
 }
 
@@ -1157,7 +1199,7 @@ static hb_buffer_t *copy_frame( hb_work_private_t *pv )
     else
 #endif
     {
-        out = hb_avframe_to_video_buffer(pv->frame, (AVRational){1,1}, 1);
+        out = hb_avframe_to_video_buffer(pv->frame, (AVRational){1,1});
     }
 
     if (pv->frame->pts != AV_NOPTS_VALUE)
@@ -1330,33 +1372,6 @@ static hb_buffer_t *copy_frame( hb_work_private_t *pv )
     return out;
 }
 
-static const char * get_range_name(int color_range)
-{
-    switch (color_range)
-    {
-        case AVCOL_RANGE_UNSPECIFIED:
-        case AVCOL_RANGE_MPEG:
-            return "limited";
-        case AVCOL_RANGE_JPEG:
-            return "full";
-    }
-    return "limited";
-}
-
-static const char * get_range_name_cuda(int color_range)
-{
-    // Different names for totally no reason
-    switch (color_range)
-    {
-        case AVCOL_RANGE_UNSPECIFIED:
-        case AVCOL_RANGE_MPEG:
-            return "mpeg";
-        case AVCOL_RANGE_JPEG:
-            return "jpeg";
-    }
-    return "mpeg";
-}
-
 int reinit_video_filters(hb_work_private_t * pv)
 {
     int                orig_width;
@@ -1367,13 +1382,6 @@ int reinit_video_filters(hb_work_private_t * pv)
     enum AVPixelFormat pix_fmt;
     enum AVColorRange  color_range;
 
-    memset((void*)&filter_init, 0, sizeof(filter_init));
-
-    if (pv->job && pv->job->hw_pix_fmt == AV_PIX_FMT_VIDEOTOOLBOX)
-    {
-        // Filtering is done in a separate filter
-        return 0;
-    }
     if (!pv->job)
     {
         // HandBrake's preview pipeline uses yuv420 color.  This means all
@@ -1386,6 +1394,12 @@ int reinit_video_filters(hb_work_private_t * pv)
     }
     else
     {
+        if (pv->job->hw_pix_fmt == AV_PIX_FMT_VIDEOTOOLBOX)
+        {
+            // Filtering is done in a separate filter
+            return 0;
+        }
+
         if (pv->title->rotation == HB_ROTATION_90 ||
             pv->title->rotation == HB_ROTATION_270)
         {
@@ -1459,7 +1473,7 @@ int reinit_video_filters(hb_work_private_t * pv)
         {
             if (color_range != pv->frame->color_range)
             {
-                hb_dict_set_string(settings, "range", get_range_name_cuda(color_range));
+                hb_dict_set_int(settings, "range", color_range);
                 hb_avfilter_append_dict(filters, "colorspace_cuda", settings);
                 settings = hb_dict_init();
             }
@@ -1469,17 +1483,19 @@ int reinit_video_filters(hb_work_private_t * pv)
             hb_dict_set(settings, "format", hb_value_string(av_get_pix_fmt_name(pv->job->input_pix_fmt)));
             hb_avfilter_append_dict(filters, "scale_cuda", settings);
         }
-        else if ((pv->frame->width % 2) == 0 && (pv->frame->height % 2) == 0)
+        else if (hb_av_can_use_zscale(pv->frame->format,
+                                      pv->frame->width, pv->frame->height,
+                                      orig_width, orig_height))
         {
-            hb_dict_set(settings, "pix_fmts", hb_value_string(av_get_pix_fmt_name(pix_fmt)));
-            hb_avfilter_append_dict(filters, "format", settings);
-            settings = hb_dict_init();
-
             hb_dict_set(settings, "w", hb_value_int(orig_width));
             hb_dict_set(settings, "h", hb_value_int(orig_height));
             hb_dict_set_string(settings, "filter", "lanczos");
-            hb_dict_set_string(settings, "range", get_range_name(color_range));
+            hb_dict_set_string(settings, "range", av_color_range_name(color_range));
             hb_avfilter_append_dict(filters, "zscale", settings);
+
+            settings = hb_dict_init();
+            hb_dict_set(settings, "pix_fmts", hb_value_string(av_get_pix_fmt_name(pix_fmt)));
+            hb_avfilter_append_dict(filters, "format", settings);
         }
         // Fallback to swscale, zscale requires a mod 2 width and height
         else
@@ -1487,8 +1503,8 @@ int reinit_video_filters(hb_work_private_t * pv)
             hb_dict_set(settings, "w", hb_value_int(orig_width));
             hb_dict_set(settings, "h", hb_value_int(orig_height));
             hb_dict_set(settings, "flags", hb_value_string("lanczos+accurate_rnd"));
-            hb_dict_set_string(settings, "in_range", get_range_name(pv->frame->color_range));
-            hb_dict_set_string(settings, "out_range", get_range_name(color_range));
+            hb_dict_set_int(settings, "in_range", pv->frame->color_range);
+            hb_dict_set_int(settings, "out_range", color_range);
             hb_avfilter_append_dict(filters, "scale", settings);
 
             settings = hb_dict_init();
@@ -1559,6 +1575,15 @@ int reinit_video_filters(hb_work_private_t * pv)
 
     enum AVPixelFormat sw_pix_fmt = pv->frame->format;
     enum AVPixelFormat hw_pix_fmt = AV_PIX_FMT_NONE;
+    enum AVColorSpace color_matrix = pv->frame->colorspace;
+
+    if (!pv->job)
+    {
+        // Sanitize the color_matrix when decoding preview images
+        hb_rational_t par = {pv->frame->sample_aspect_ratio.num, pv->frame->sample_aspect_ratio.den};
+        hb_geometry_t geo = {pv->frame->width, pv->frame->height, par};
+        color_matrix = hb_get_color_matrix(pv->frame->colorspace, geo);
+    }
 
     AVHWFramesContext *frames_ctx = NULL;
     if (pv->frame->hw_frames_ctx)
@@ -1568,6 +1593,8 @@ int reinit_video_filters(hb_work_private_t * pv)
         hw_pix_fmt = frames_ctx->format;
     }
 
+    memset((void*)&filter_init, 0, sizeof(filter_init));
+
     filter_init.job               = pv->job;
     filter_init.pix_fmt           = sw_pix_fmt;
     filter_init.hw_pix_fmt        = hw_pix_fmt;
@@ -1575,6 +1602,8 @@ int reinit_video_filters(hb_work_private_t * pv)
     filter_init.geometry.height   = pv->frame->height;
     filter_init.geometry.par.num  = pv->frame->sample_aspect_ratio.num;
     filter_init.geometry.par.den  = pv->frame->sample_aspect_ratio.den;
+    filter_init.color_matrix      = color_matrix;
+    filter_init.color_range       = pv->frame->color_range;
     filter_init.time_base.num     = 1;
     filter_init.time_base.den     = 1;
     filter_init.vrate.num         = vrate.num;
@@ -1596,21 +1625,49 @@ fail:
     return 1;
 }
 
+static void sanitize_deprecated_pix_fmts(AVFrame *frame)
+{
+    switch (frame->format)
+    {
+        case AV_PIX_FMT_YUVJ420P:
+            frame->format = AV_PIX_FMT_YUV420P;
+            frame->color_range = AVCOL_RANGE_JPEG;
+            break;
+        case AV_PIX_FMT_YUVJ422P:
+            frame->format = AV_PIX_FMT_YUV422P;
+            frame->color_range = AVCOL_RANGE_JPEG;
+            break;
+        case AV_PIX_FMT_YUVJ444P:
+            frame->format = AV_PIX_FMT_YUV444P;
+            frame->color_range = AVCOL_RANGE_JPEG;
+            break;
+        case AV_PIX_FMT_YUVJ440P:
+            frame->format = AV_PIX_FMT_YUV440P;
+            frame->color_range = AVCOL_RANGE_JPEG;
+            break;
+        case AV_PIX_FMT_YUVJ411P:
+            frame->format = AV_PIX_FMT_YUV411P;
+            frame->color_range = AVCOL_RANGE_JPEG;
+            break;
+        default:
+            break;
+    }
+}
+
 static void filter_video(hb_work_private_t *pv)
 {
     // Make sure every frame is tagged
-    if (pv->frame->color_primaries == AVCOL_PRI_UNSPECIFIED ||
-        pv->frame->color_trc       == AVCOL_TRC_UNSPECIFIED ||
-        pv->frame->colorspace      == AVCOL_SPC_UNSPECIFIED)
+    if (pv->job)
     {
         pv->frame->color_primaries = pv->title->color_prim;
         pv->frame->color_trc       = pv->title->color_transfer;
         pv->frame->colorspace      = pv->title->color_matrix;
+        pv->frame->color_range     = pv->title->color_range;
     }
-    if (pv->frame->color_range == AVCOL_RANGE_UNSPECIFIED)
-    {
-        pv->frame->color_range = pv->title->color_range;
-    }
+
+    // J pixel formats are mostly deprecated, however
+    // they are still set by decoders, breaking some filters
+    sanitize_deprecated_pix_fmts(pv->frame);
 
     reinit_video_filters(pv);
     if (pv->video_filters.graph != NULL)
@@ -2326,26 +2383,20 @@ static int decavcodecvWork( hb_work_object_t * w, hb_buffer_t ** buf_in,
     return result;
 }
 
-
 static void compute_frame_duration( hb_work_private_t *pv )
 {
+    int64_t max_fps = 256LL;
+    int64_t min_fps = 8LL;
     double duration = 0.;
-    int64_t max_fps = 64LL;
 
     // context->time_base may be in fields, so set the max *fields* per second
     const AVCodecDescriptor *desc = avcodec_descriptor_get(pv->context->codec_id);
     int ticks_per_frame = desc && (desc->props & AV_CODEC_PROP_FIELDS) ? 2 : 1;
 
-    if (ticks_per_frame > 1)
-    {
-        max_fps *= ticks_per_frame;
-    }
-
-    if ( pv->title->opaque_priv )
+    if (pv->title->opaque_priv)
     {
         // If ffmpeg is demuxing for us, it collects some additional
-        // information about framerates that is often more accurate
-        // than context->time_base.
+        // information about framerates that is often accurate
         AVFormatContext *ic = (AVFormatContext*)pv->title->opaque_priv;
         AVStream *st = ic->streams[pv->title->video_id];
         if (st->nb_frames && st->duration > 0)
@@ -2355,32 +2406,31 @@ static void compute_frame_duration( hb_work_private_t *pv )
             duration = ( (double)st->duration * (double)st->time_base.num ) /
                        ( (double)st->nb_frames * (double)st->time_base.den );
         }
-        // Raw demuxers set a default fps of 25 and do not parse
-        // a value from the container.  So use the codec time_base
-        // for raw demuxers.
-        else if (ic->iformat->raw_codec_id == AV_CODEC_ID_NONE)
+        else
         {
             AVRational *tb = NULL;
-            // Try r_frame_rate, which is usually set for cfr streams
-            if (st->r_frame_rate.num && st->r_frame_rate.den)
-            {
-                duration = (double)st->r_frame_rate.den / (double)st->r_frame_rate.num;
-            }
-            // XXX We don't have a frame count or duration so try to use the
-            // far less reliable time base info in the stream.
-            // Because the time bases are so screwed up, we only take values
-            // in the range 8fps - 64fps.
-            else if ( st->avg_frame_rate.den * 64LL > st->avg_frame_rate.num &&
-                 st->avg_frame_rate.num > st->avg_frame_rate.den * 8LL )
+            // We don't have a frame count or duration so try to use the
+            // far less reliable avg_frame_rate info in the stream.
+            if (st->avg_frame_rate.den && st->avg_frame_rate.num)
             {
                 tb = &(st->avg_frame_rate);
-                duration =  (double)tb->den / (double)tb->num;
             }
-            else if ( st->time_base.num * 64LL > st->time_base.den &&
-                      st->time_base.den > st->time_base.num * 8LL )
+            // Try r_frame_rate, which is usually set for cfr streams
+            else if (st->r_frame_rate.num && st->r_frame_rate.den)
+            {
+                tb = &(st->r_frame_rate);
+            }
+            // Because the time bases are so screwed up, we only take values
+            // in a restricted range.
+            else if (st->time_base.num * max_fps > st->time_base.den &&
+                     st->time_base.den > st->time_base.num * min_fps)
             {
                 tb = &(st->time_base);
-                duration =  (double)tb->num / (double)tb->den;
+            }
+
+            if (tb != NULL)
+            {
+                duration = (double)tb->den / (double)tb->num;
             }
         }
     }
@@ -2389,36 +2439,17 @@ static void compute_frame_duration( hb_work_private_t *pv )
         duration = (double)pv->context->framerate.den / (double)pv->context->framerate.num;
     }
 
-    // time_base is not set by decoders, todo: investigate if this
-    // can be safely removed
-    if (!duration &&
-        pv->context->time_base.num * max_fps > pv->context->time_base.den &&
-        pv->context->time_base.den > pv->context->time_base.num * 8LL)
-    {
-        duration = (double)pv->context->time_base.num / (double)pv->context->time_base.den;
-        if (ticks_per_frame > 1)
-        {
-            // for ffmpeg 0.5 & later, the H.264 & MPEG-2 time base is
-            // field rate rather than frame rate so convert back to frames.
-            duration *= ticks_per_frame;
-        }
-    }
-
-    if ( duration == 0 )
-    {
-        // No valid timing info found in the stream, so pick some value
-        duration = 1001. / 24000.;
-    }
-    pv->duration = duration * 90000.;
-
     int clock_min, clock_max, clock;
     hb_video_framerate_get_limits(&clock_min, &clock_max, &clock);
-    if (pv->duration < 1 / (clock / 90000.))
+
+    if (duration == 0 || duration > INT_MAX / clock || duration < 1. / clock)
     {
-        // Not representable, probably a broken file, so pick some value
-        pv->duration = 1001. / 24000. * 90000;
+        // No valid timing info found in the stream
+        // or not representable, probably a broken file, so pick some value
+        duration = 1001. / 24000.;
     }
 
+    pv->duration = duration * 90000.;
     pv->field_duration = pv->duration;
     if ( ticks_per_frame > 1 )
     {
@@ -2497,6 +2528,10 @@ static int decavcodecvInfo( hb_work_object_t *w, hb_work_info_t *info )
     else if (pv->context->pix_fmt == AV_PIX_FMT_VIDEOTOOLBOX)
     {
         info->video_decode_support |= HB_DECODE_SUPPORT_VIDEOTOOLBOX;
+    }
+    else if (pv->context->pix_fmt == AV_PIX_FMT_D3D11)
+    {
+        info->video_decode_support |= HB_DECODE_SUPPORT_MF;
     }
 
     return 1;
@@ -2668,7 +2703,7 @@ static void decodeAudio(hb_work_private_t *pv, packet_info_t * packet_info)
                 av_channel_layout_default(&default_ch_layout, pv->frame->ch_layout.nb_channels);
                 channel_layout = default_ch_layout;
             }
-            hb_audio_resample_set_channel_layout(pv->resample, channel_layout.u.mask);
+            hb_audio_resample_set_ch_layout(pv->resample, &channel_layout);
             hb_audio_resample_set_sample_fmt(pv->resample,
                                              pv->frame->format);
             hb_audio_resample_set_sample_rate(pv->resample,
