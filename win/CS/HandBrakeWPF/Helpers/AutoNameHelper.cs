@@ -104,6 +104,7 @@ namespace HandBrakeWPF.Helpers
             if (userSettingService.GetUserSetting<bool>(UserSettingConstants.AutoNameRemoveUnderscore))
             {
                 sourceName = sourceName.Replace("_", " ");
+                sourceName = sourceName.Replace(".", " ");
             }
 
             if (userSettingService.GetUserSetting<bool>(UserSettingConstants.RemovePunctuation))
